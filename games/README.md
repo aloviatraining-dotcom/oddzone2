@@ -23,6 +23,7 @@ The same caveat as below applies with more force here — the anon key is public
 | Pac-Man | https://github.com/mumuy/pacman | MIT |
 | Asteroids | https://github.com/dmcinnes/HTML5-Asteroids | MIT |
 | Cave Runner | https://github.com/tope-olajide/cave-runner | MIT |
+| Rail Runner 3D | Supplied local HTML file | Source attribution/license not included; score is client-reported |
 | Neon Serpent | https://github.com/einncodes/NeonSerpent-2D-Snake-Game | Apache-2.0, declared in upstream README |
 | 8-Ball Pool | written for OddZone (canvas renderer, custom sub-stepped physics engine, Web Audio synth) | same project |
 

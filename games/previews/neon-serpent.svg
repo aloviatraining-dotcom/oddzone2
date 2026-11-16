@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360">
+  <defs><linearGradient id="bg" y2="1"><stop stop-color="#092b35"/><stop offset="1" stop-color="#071324"/></linearGradient><filter id="glow"><feGaussianBlur stdDeviation="7" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+  <rect width="640" height="360" fill="url(#bg)"/>
+  <g stroke="#31d8ac" stroke-opacity=".15" stroke-width="2"><path d="M40 0v360M100 0v360M160 0v360M220 0v360M280 0v360M340 0v360M400 0v360M460 0v360M520 0v360M580 0v360"/><path d="M0 40h640M0 100h640M0 160h640M0 220h640M0 280h640M0 340h640"/></g>
+  <path d="M141 259h121v-60h120v-60h120" fill="none" stroke="#16e2a6" stroke-width="35" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
+  <path d="M141 259h121v-60h120v-60h120" fill="none" stroke="#a9ffe6" stroke-opacity=".75" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="490" y="115" width="35" height="35" rx="9" fill="#ff62cd" stroke="#ffd2f1" stroke-width="4" filter="url(#glow)"/>
+  <path d="M442 119q24-9 40 4l-3 31q-22 12-42 0Z" fill="#4fffd0" stroke="#d5fff3" stroke-width="3" filter="url(#glow)"/>
+  <circle cx="467" cy="128" r="4" fill="#061a25"/><circle cx="454" cy="128" r="4" fill="#061a25"/>
+  <text x="320" y="66" text-anchor="middle" font-family="Arial,sans-serif" font-size="21" font-weight="800" letter-spacing="7" fill="#8af8d8">NEON SERPENT</text>
+</svg>

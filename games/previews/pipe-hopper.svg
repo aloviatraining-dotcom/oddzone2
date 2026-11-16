@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360">
+  <defs><linearGradient id="sky" y2="1"><stop stop-color="#56bed7"/><stop offset="1" stop-color="#c5f2d9"/></linearGradient></defs>
+  <rect width="640" height="360" fill="url(#sky)"/>
+  <g fill="#eaffef" opacity=".72"><circle cx="105" cy="67" r="25"/><circle cx="132" cy="65" r="32"/><circle cx="158" cy="72" r="22"/><circle cx="454" cy="92" r="24"/><circle cx="481" cy="87" r="31"/><circle cx="512" cy="95" r="22"/></g>
+  <path d="M0 300h640v60H0Z" fill="#499d6f"/><path d="M0 294h640v9H0Z" fill="#e5d467"/>
+  <g fill="#247a53"><path d="M83 0h83v116H83zM83 215h83v80H83z"/><path d="M83 105h98v20H83zM83 206h98v20H83z"/>
+  <path d="M444 0h83v77h-83zM444 178h83v117h-83z"/><path d="M429 68h98v20h-98zM429 169h98v20h-98z"/></g>
+  <g fill="#34996b"><path d="M78 105h97v18H78zM78 205h97v18H78zM439 68h97v18h-97zM439 168h97v18h-97z"/></g>
+  <text x="320" y="72" text-anchor="middle" font-family="Arial,sans-serif" font-size="43" font-weight="900" fill="#123a45">12</text>
+  <ellipse cx="288" cy="179" rx="25" ry="19" fill="#e9c949"/>
+  <circle cx="299" cy="172" r="5" fill="#fff"/><circle cx="301" cy="172" r="2.5" fill="#173440"/>
+  <path d="m309 179 20 6-20 6Z" fill="#ef8747"/>
+  <path d="M272 182 254 192l20-4Z" fill="#fff2a1"/>
+  <path d="M0 324h640" stroke="#357c58" stroke-width="4" opacity=".55"/>
+</svg>

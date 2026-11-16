@@ -16,26 +16,28 @@
     --serif:"Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
     --sans:"Avenir Next","Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
   }
+
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;min-height:100%;overflow:hidden;touch-action:manipulation;overscroll-behavior:none}
   body{font-family:var(--sans);color:var(--ivory);
     background:radial-gradient(600px 500px at 50% 40%,#1c2a50,transparent 80%),#0f1830;
     display:flex;justify-content:center;-webkit-user-select:none;user-select:none;overflow-x:hidden;}
-  #app{width:100%;max-width:none;height:100dvh;padding:max(2px,env(safe-area-inset-top)) max(2px,env(safe-area-inset-right)) max(2px,env(safe-area-inset-bottom)) max(2px,env(safe-area-inset-left));display:flex;flex-direction:column;gap:8px;justify-content:center}
+  #app{width:100%;max-width:none;height:100dvh;min-height:0;padding:max(2px,env(safe-area-inset-top)) max(2px,env(safe-area-inset-right)) max(2px,env(safe-area-inset-bottom)) max(2px,env(safe-area-inset-left));display:flex;flex-direction:column;gap:8px;justify-content:center;overflow:hidden}
   #aimHint{position:fixed;left:50%;top:0;transform:translateX(-50%);white-space:nowrap;text-align:center;font:800 11px/1.2 var(--sans);letter-spacing:.06em;text-transform:uppercase;text-shadow:0 1px 3px #000;opacity:0;pointer-events:none;z-index:3;transition:opacity .15s}
   #aimHint.show{opacity:.9}#aimHint.gone{opacity:0}
-  .play{display:flex;gap:2px;align-items:flex-start;justify-content:space-between;width:100%}
+  .play{display:flex;flex:1 1 auto;gap:4px;align-items:center;justify-content:center;width:100%;min-width:0;min-height:0}
   body.lefty .play{flex-direction:row-reverse}
   body.lefty .btns{right:auto;left:calc(100% + 6px)}
-  #stage{position:relative;flex:none;
+  #stage{position:relative;flex:0 1 auto;
     width:min(calc(100vw - 80px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)),calc((100dvh - 8px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))*.5185));
     aspect-ratio:560/1080;border-radius:18px;filter:drop-shadow(0 20px 34px rgba(0,0,0,.6))}
-  canvas#game{width:100%;height:100%;display:block;border-radius:18px;touch-action:none;cursor:crosshair;filter:saturate(1.3) contrast(1.12)}
+  canvas#game{width:100%;height:100%;display:block;object-fit:contain;border-radius:18px;touch-action:none;cursor:crosshair;filter:saturate(1.3) contrast(1.12)}
   #toast{position:absolute;left:50%;top:7%;transform:translate(-50%,-6px);padding:7px 16px;border-radius:999px;background:rgba(10,14,12,.82);border:1px solid var(--line);font-size:14px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;white-space:nowrap}
   #toast.show{opacity:1;transform:translate(-50%,0)}
   .overlay{position:absolute;inset:0;border-radius:18px;display:flex;align-items:center;justify-content:center;
     background:rgba(8,12,10,.78);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);padding:14px;z-index:5}
   .overlay.hidden{display:none}
+  #btnRetrySettlement.hidden{display:none}
   .card{width:min(420px,100%);max-height:96%;overflow:auto;background:linear-gradient(180deg,#1f2e25,#141d18);border:1px solid rgba(226,184,88,.35);border-radius:20px;padding:22px 24px;text-align:left;box-shadow:0 20px 50px rgba(0,0,0,.6)}
   .card h1,.card h2{font-family:var(--serif);margin:0 0 4px;font-size:26px;line-height:1.1}
   .card p.sub{margin:0 0 14px;color:var(--muted);font-size:13px}
@@ -45,9 +47,10 @@
   .btn{appearance:none;border:0;cursor:pointer;font:inherit;font-weight:700;border-radius:12px;padding:12px 20px;
     background:linear-gradient(180deg,#f0cb74,#cf9f3d);color:#2a1d05;box-shadow:0 3px 0 #8f6a1e,0 8px 18px rgba(0,0,0,.35);transition:transform .08s,box-shadow .08s}
   .btn:active{transform:translateY(2px);box-shadow:0 1px 0 #8f6a1e,0 4px 10px rgba(0,0,0,.35)}
+  .btn.hidden{display:none}
   .btn.wide{width:100%;font-size:16px;margin-bottom:8px}
   .btn.alt{background:linear-gradient(180deg,#2b3a63,#1b2748);color:#fff;box-shadow:0 3px 0 #0e1630}
-  .big-score{font-family:var(--serif);font-size:52px;font-weight:700;color:var(--brass);line-height:1;margin:4px 0 6px;font-variant-numeric:tabular-nums}
+  .big-score{font-family:var(--serif);font-size:clamp(24px,8vw,52px);font-weight:700;color:var(--brass);line-height:1;margin:4px 0 6px}
   .rating{font-size:14px;margin-bottom:10px;color:var(--ivory)}
   table.break{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px}
   table.break td{padding:4px 0;border-bottom:1px solid var(--line)}
@@ -98,7 +101,7 @@
   .dial b{font-size:10px;font-variant-numeric:tabular-nums}
   .cuePanel{flex:1;min-height:80px;width:34px;margin-top:4px;position:relative;overflow:hidden;
     background:linear-gradient(#35e0ff,#6a5cff 50%,#e04cc2);border:2px solid #9aa4b8;border-radius:6px;touch-action:none;cursor:grab}
-  .cueStick{position:absolute;left:50%;top:4px;width:8px;margin-left:-4px;height:60%;border-radius:5px;pointer-events:none;
+  .cueStick{position:absolute;left:50%;top:4px;width:8px;margin-left:-4px;height:72%;border-radius:5px;pointer-events:none;
     background:linear-gradient(90deg,rgba(0,0,0,.3),rgba(255,255,255,.28) 40%,rgba(0,0,0,.3)),linear-gradient(180deg,#f4efe4 0 2%,#e8b676 2% 62%,#5a2e14 62%);
     box-shadow:0 4px 10px rgba(0,0,0,.5);transition:transform .08s ease-out}
   .cuePanel.drag .cueStick{transition:none}
@@ -114,7 +117,29 @@
   .ghost:hover{background:rgba(255,246,222,.08)}
   .vol{display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:700;color:var(--ivory);letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px}
   .vol input{width:100%;margin:0;accent-color:#5be15b;touch-action:none}
+  @media (max-height:520px){
+    #app{gap:2px}
+    .col{width:clamp(22px,6vh,34px);gap:2px}
+    .av,.spin,.menuBtn{width:clamp(22px,6vh,34px);height:clamp(22px,6vh,34px)}
+    .av{font-size:clamp(14px,3.8vh,19px)}
+    .slots{gap:1px;margin:1px 0}
+    .mini{width:clamp(12px,4vh,24px);height:clamp(12px,4vh,24px)}
+    .mini i{width:clamp(8px,2.2vh,13px);height:clamp(8px,2.2vh,13px);font-size:clamp(6px,1.5vh,8px)}
+    .ms{font-size:clamp(7px,2vh,10px)}
+    .ms b{font-size:clamp(10px,2.7vh,14px)}
+    .cuePanel{width:clamp(22px,6vh,34px);min-height:0;margin-top:2px}
+    .cueStick{width:clamp(5px,1.4vh,8px);margin-left:clamp(-4px,-.7vh,-2px);height:72%}
+    #btnMenu{margin-top:2px}
+  }
+  @media (max-height:380px){.slots{display:none}}
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  /* Live duel: cue is disabled until it is this device's turn. */
+  .cueLocked{opacity:.35;pointer-events:none;filter:grayscale(.6)}
+  #waitOverlay .card{max-width:420px;text-align:center}
+  #skipReplay{position:absolute;left:50%;top:12%;transform:translateX(-50%);z-index:4;width:max-content;max-width:90%;
+    border:1px solid rgba(255,213,74,.65);border-radius:999px;padding:10px 18px;background:rgba(15,24,48,.94);
+    color:#ffe28a;font:800 13px var(--sans);box-shadow:0 6px 24px rgba(0,0,0,.45);cursor:pointer}
+  #skipReplay.hidden{display:none}
 </style>
 </head>
 <body>
@@ -124,8 +149,8 @@
     <div class="col">
       <div class="av" id="av0">😎</div><div class="nm" id="nm0">You</div>
       <div class="slots" id="trayL"></div>
-      <div class="ms"><i>Score</i><b id="hudScore">0</b></div>
       <div class="ms"><i>Shots</i><b id="hudShots">0</b></div>
+      <div class="ms" id="turnTimerBox" style="display:none"><i>Timer</i><b id="turnTimerDisplay" style="color:#ffd54a">60s</b></div>
       <div class="cuePanel" id="cuePanel" aria-label="Pull the cue down and release to shoot">
         <div class="cueStick" id="cueStick"></div>
       </div>
@@ -134,6 +159,7 @@
     <div id="stage">
       <canvas id="game" aria-label="Pool table. Aim and shoot."></canvas>
       <div id="toast" role="status" aria-live="polite"></div>
+      <button class="hidden" id="skipReplay" type="button">Skip Replay</button>
 
       <!-- START OVERLAY -->
       <div class="overlay" id="startOverlay">
@@ -141,18 +167,24 @@
           <h2 style="text-align:center;margin-bottom:16px">🎱 8-Ball Pool</h2>
           <p class="sub" style="text-align:center">Sink all your balls, then the 8-ball to win</p>
           <ul class="rules">
-            <li>Solids (1–7) or stripes (9–15) assigned after first ball pocketed</li>
-            <li>Pocket all your group, then call &amp; sink the 8-ball in that pocket</li>
-            <li>Scratch or wrong ball = foul (opponent gets ball-in-hand)</li>
-            <li>Sinking 8-ball early = instant loss</li>
+            <li>The first legally pocketed object ball assigns solids (1–7) or stripes (9–15)</li>
+            <li>Clear your group, then call a pocket and legally sink the 8-ball to win</li>
+            <li>A foul gives the incoming player ball-in-hand</li>
+            <li>Sinking the 8-ball early or scratching on it is an immediate loss</li>
           </ul>
-          <button class="btn wide" id="btnStart">Play vs Computer</button>
+          <!-- Solo practice: both seats are yours. There is no computer
+               opponent in OddZone pool — stake matches are against real players. -->
+          <button class="btn wide" id="btnStart">Practice Solo</button>
 
           <!-- ASYNC / TURN-BASED (OddZone "Take Turns" mode) -->
           <div class="asyncBox" id="asyncBox" style="margin-top:10px">
-            <h3>Async Match <span class="turnBadge wait" id="asyncBadge">Take Turns</span></h3>
-            <p class="sub">Save a code, share it with a rival. Each of you plays one shot at a
-              time from your own device — the table, score and turn are stored on OddZone's backend.</p>
+            <h3>Async Match <span class="turnBadge" id="asyncBadge">1-minute run</span></h3>
+            <h3 style="margin-top:8px">Live Duel <span class="turnBadge wait" id="liveBadge">Not connected</span></h3>
+            <p class="sub">Live duel: both players are at the table at the same time. The room
+              listens on <code>duel_room_&lt;matchId&gt;</code>.</p>
+            <p class="sub">Async pool: take turns on the same saved table. Every shot is
+              recorded for replay, and the next player can watch the turn or skip straight
+              to the settled table. Leave between turns and return when it is your turn.</p>
             <div id="asyncCreateBox">
               <div class="row">
                 <button class="btn alt" id="btnAsyncCreate">Create</button>
@@ -176,6 +208,14 @@
         </div>
       </div>
 
+      <!-- LIVE DUEL: WAITING ROOM (shown when launched with ?matchId=) -->
+      <div class="overlay hidden" id="waitOverlay">
+        <div class="card">
+          <h2 id="waitTitle">Waiting for Opponent…</h2>
+          <p class="sub" id="waitSub">Connecting to the match room.</p>
+        </div>
+      </div>
+
       <!-- END OVERLAY -->
       <div class="overlay hidden" id="endOverlay">
         <div class="card">
@@ -185,6 +225,8 @@
           <table class="break" id="endTable"></table>
           <div id="saveStatus"></div>
           <div class="pendingBanner" id="pendingBanner"></div>
+          <button class="btn wide alt hidden" id="btnRetrySettlement" type="button">Retry result submission</button>
+          <button class="btn wide alt hidden" id="btnCheckStatus" type="button">Check Game Status</button>
           <button class="btn wide" id="btnAgain">Play Again</button>
           <button class="btn wide alt" id="btnBack" onclick="window.parent.postMessage({type:'oddzone:close'},'*')">Back to OddZone</button>
         </div>
@@ -192,10 +234,9 @@
     </div>
 
     <div class="col">
-      <div class="av" id="av1">🤖</div><div class="nm" id="nm1">CPU</div>
+      <div class="av" id="av1">😎</div><div class="nm" id="nm1">You</div>
       <div class="slots" id="trayR"></div>
       <div class="ms"><i>Pocketed</i><b><span id="hudPocketed">0</span>/15</b></div>
-      <div class="ms"><i>Best</i><b id="hudBest">0</b></div>
       <div class="spin" id="spin" aria-label="Cue ball spin"><i id="spinDot"></i></div>
       <button class="menuBtn" id="btnRev" aria-label="Flip aim">⇄</button>
       <button class="menuBtn" id="btnMenu" aria-label="Menu">☰</button>
@@ -215,7 +256,7 @@
 <script>
 /* ============================================================= *
  * ODDZONE BRIDGE
- * - `oddzone:score` / `oddzone:game-complete` -> parent scoreboard
+ * - `oddzone:score` / `oddzone:game-complete` -> parent arena bridge
  * - __oddzoneReadScore / __oddzoneStart / __oddzoneEnd -> arena timer
  * - Async "Take Turns" backend on Supabase Realtime
  * ============================================================= */
@@ -226,20 +267,30 @@ const ASYNC_TABLE   = 'pool_matches';
 const ASYNC_CHANNEL = 'pool-match';
 
 const URL_PARAMS   = new URLSearchParams(location.search);
-const CHALLENGE_ID = (URL_PARAMS.get('challenge_id') || URL_PARAMS.get('match_id') || '').trim() || null;
+window.URL_PARAMS  = URL_PARAMS;   // read by the engine IIFE below
+const CHALLENGE_ID = (URL_PARAMS.get('challenge_id') || URL_PARAMS.get('match_id')
+  || URL_PARAMS.get('asyncMatchId') || '').trim() || null;
 
-/* Report live score to OddZone parent frame */
-function reportScore(score) {
-  try { window.parent.postMessage({ type: 'oddzone:score', score }, '*'); } catch(e) {}
+/* Keep Pool results out of the arena's legacy points scoreboard. */
+function reportScore() {
+  try { window.parent.postMessage({ type: 'oddzone:score', score: 0 }, '*'); } catch(e) {}
 }
-/* Report match complete */
-function reportComplete(score) {
-  try { window.parent.postMessage({ type: 'oddzone:game-complete', score }, '*'); } catch(e) {}
+function reportComplete() {
+  try { window.parent.postMessage({ type: 'oddzone:game-complete', score: 0 }, '*'); } catch(e) {}
 }
 /* Ask the parent arena to close (Back to OddZone button). */
 function requestClose() {
   try { window.parent.postMessage({ type: 'oddzone:close' }, '*'); } catch(e) {}
 }
+
+/* The full game engine lives in its own IIFE below and cannot see these
+   declarations, so publish the handful it needs on window explicitly. */
+window.reportScore = reportScore;
+window.reportComplete = reportComplete;
+window.requestClose = requestClose;
+// NOTE: CHALLENGE_ID is a top-level `const`, and redeclaring it through a
+// `window.X = X` assignment is a SyntaxError in a classic script. It is already
+// global on its own, so it is deliberately NOT republished here.
 
 let _sb = null;
 function getSB() {
@@ -276,6 +327,13 @@ async function submitMatchScore(playerScore, d = {}) {
   console.log('[8-ball] Simulated score save:', update);
   return { ok: true, mode: 'simulated' };
 }
+window.getSB = getSB;
+window.submitMatchScore = submitMatchScore;
+// Publish the parsed ids. The engine is a separate IIFE and cannot see this
+// script's declarations; reading `window.CHALLENGE_ID` there always returned
+// null, because a top-level `const` is never a property of `window`. Every
+// stake settlement then addressed a missing challenge.
+window.CHALLENGE_ID = CHALLENGE_ID;
 
 /* Async state helpers are defined inside the game closure below, next to
    `balls` / `players` / `state`, because they read and write them. */
@@ -298,9 +356,35 @@ window.addEventListener('message', e => {
 
 <!-- FULL GAME ENGINE -->
 <script>
-(() => {
+(function(){
 'use strict';
 
+/* BRIDGE TO THE PAGE HELPERS.
+ *
+ * This engine is its own IIFE, so nothing declared in the <script> above is
+ * in scope here. updateHud() calls reportScore(), and the settle path needs
+ * getSB()/submitMatchScore(); without these locals the first updateHud() threw
+ * "reportScore is not defined" and the whole engine stopped before it ever
+ * installed window.__oddzoneReadScore — so the arena scored every 8-ball match
+ * as 0. Guarded so the file still boots if the helpers are missing. */
+const reportScore = (s) => { try { window.reportScore?.(s); } catch (e) {} };
+const reportComplete = (s) => { try { window.reportComplete?.(s); } catch (e) {} };
+const requestClose = () => { try { window.requestClose?.(); } catch (e) {} };
+const getSB = () => { try { return window.getSB?.() || null; } catch (e) { return null; } };
+const submitMatchScore = (s, d) => (window.submitMatchScore
+  ? window.submitMatchScore(s, d)
+  : Promise.resolve({ ok: true, mode: 'simulated' }));
+const CHALLENGE_ID = (() => {
+  try {
+    // Added by this change: the arena passes the stake challenge as
+    // `asyncMatchId` (the solo-backed flow). `challenge_id` / `match_id` stay
+    // supported for direct links.
+    const p = window.URL_PARAMS;
+    const id = (p && (p.get('challenge_id') || p.get('match_id') || p.get('asyncMatchId')))
+      || window.CHALLENGE_ID || '';
+    return String(id).trim() || null;
+  } catch (e) { return null; }
+})();
 const W = 1080, H = 560;
 const RAIL = 40;
 const L = RAIL, T = RAIL, RT = W - RAIL, B = H - RAIL;
@@ -505,11 +589,71 @@ const balls=[]; for(let n=0;n<=15;n++)balls.push(makeBall(n));
 let state='menu',score=0,shots=0,aimAngle=0;
 let shotPocketed=[],preShotObjLeft=0,strike=null,settleTimer=0,moveTime=0;
 let uiPower=0,keyPower=0,inHand=false,spin={x:0,y:0},spinState=null;
-let frameBallHit=0,frameWallHit=0;const hitEvents=[];
+let frameBallHit=0,frameWallHit=0,shotRailHit=false;const hitEvents=[];
 const floats=[];
 const keys={left:false,right:false,space:false,shift:false};
-let best=0;try{best=+localStorage.getItem('pool8_best')||0;}catch(e){}
 const input={down:false,pid:null,power:0};
+
+/* ASYNC TURN TIMER — 60 s, starts only on the player's very first shot */
+const TURN_SECONDS=60;
+let asyncTurnTimer=TURN_SECONDS;
+let asyncTurnTimerActive=false;
+let asyncTurnTimerInterval=null;
+let asyncTurnDeadline=0;
+let firstShotFired=false;
+let turnExpiryPending=false;
+let turnSaveInProgress=false;
+let terminalTurnSaved=false;
+let savedFinalChallengeId=null;
+let savedFinalWinnerId=null;
+let poolOwnChallengeId=null;
+let turnPreTurnBalls=null;
+let turnPreTurnState=null;
+let turnShotsReplay=[];
+let replayPlayback=null;
+
+/* A run is timed when it can be banked: a solo rack, a stake-backed run, or
+ * any rack in the arena. A free friendly rack is untimed. */
+const isTimedRun=()=>SOLO_BACKED||SOLO_MODE||mode==='async'||mode==='online';
+
+/* Starts the strict 1-minute clock. Called from shoot(), on the player's very
+ * FIRST shot only -- never on load, never while waiting for a rival. */
+function startTurnTimer(){
+  stopTurnTimer();
+  asyncTurnTimerActive=true;
+  asyncTurnTimer=TURN_SECONDS;
+  // Wall-clock deadline, so a throttled tab or a backgrounded iframe does not
+  // give the player a longer run than everybody else.
+  asyncTurnDeadline=performance.now()+TURN_SECONDS*1000;
+  const box=$('turnTimerBox');if(box)box.style.display='';
+  updateTurnTimerHUD();
+  asyncTurnTimerInterval=setInterval(()=>{
+    asyncTurnTimer=Math.max(0,Math.ceil((asyncTurnDeadline-performance.now())/1000));
+    // Publish the strict wall-clock remaining on window: the arena's scoreboard
+    // mirrors THIS value, so a private interval cannot let one tab (or a
+    // backgrounded iframe) drift past the other player's minute.
+    window.__oddzoneRunRemaining=asyncTurnTimer;
+    updateTurnTimerHUD();
+    if(asyncTurnTimer<=0){
+      stopTurnTimer();
+      if(TURN_BASED){
+        if(state==='striking'||state==='moving'||state==='settling')turnExpiryPending=true;
+        else if(state!=='over')void endPoolTurn('Time up');
+      }else if(state!=='over')finishGame(0,'Time up');
+    }
+  },200);
+}
+function stopTurnTimer(){
+  clearInterval(asyncTurnTimerInterval);
+  asyncTurnTimerInterval=null;
+  asyncTurnTimerActive=false;
+}
+function updateTurnTimerHUD(){
+  const el=$('turnTimerDisplay');
+  if(!el)return;
+  el.textContent=asyncTurnTimer+'s';
+  el.style.color=asyncTurnTimer<=10?'#ef6a57':asyncTurnTimer<=20?'#f0a030':'#ffd54a';
+}
 
 function freshStats(){return{ballPts:0,scratchPts:0,scratches:0,balls:0};}
 
@@ -524,10 +668,10 @@ const trayEls={};
 })();
 function pop(el){if(el.animate)el.animate([{transform:'scale(1.18)'},{transform:'scale(1)'}],{duration:240,easing:'ease-out'});}
 function updateHud(){
-  $('hudScore').textContent=score;$('hudShots').textContent=shots;$('hudBest').textContent=best;
+  $('hudShots').textContent=shots;
   let c=0;for(let n=1;n<=15;n++){const on=balls[n].state!=='active';trayEls[n].classList.toggle('on',on);if(on)c++;}
   $('hudPocketed').textContent=c;renderSlots();
-  reportScore(score);
+  reportScore(0);
 }
 function setPowerUI(p){uiPower=p;$('cueStick').style.transform='translateY('+(p*cueTravel()).toFixed(1)+'px)';}
 let toastTimer=0;
@@ -552,22 +696,31 @@ function placeCue(){
 }
 
 function newGame(){
-  // In an async match the table is shared state — a local re-rack would
-  // silently desync it from the opponent's device, so only the seat that
-  // is up may restart, and the restart is broadcast like any other move.
-  if(mode==='async'){
-    if(!asyncState.ready){toast('Create or join an async match first',1800);return;}
-    if(cur!==asyncState.mySeat){toast('It is your rival’s turn',1600);return;}
+  if(TURN_BASED&&asyncState.ready&&state!=='menu'){
+    toast('This saved match cannot be restarted or re-racked',2200);
+    return;
   }
-  score=0;shots=0;shotPocketed=[];floats.length=0;strike=null;keyPower=0;asyncWinner=-1;
+  // A run is this device's own. Re-racking only ever touches the LOCAL table --
+  // there is no other player to wait for and no shared board to desync.
+  if(mode==='async'&&!asyncState.ready){toast('Create or join an async match first',1800);return;}
+  // Once a run has been submitted it is locked: no free re-rack, or the score
+  // would change after it was posted.
+  if(mode==='async'&&asyncState.settled&&state==='over'){
+    toast('Your run is already submitted — open the challenge again to replay',2600);
+    return;
+  }
+  score=0;shots=0;shotPocketed=[];floats.length=0;strike=null;keyPower=0;asyncWinner=-1;finalizeReported=false;
+  // Reset turn-timer state for each fresh run
+  stopTurnTimer();firstShotFired=false;asyncTurnTimer=TURN_SECONDS;
+  const box=$('turnTimerBox');if(box)box.style.display='none';
   rackBalls();aimAngle=0;
   startOverlay.classList.add('hidden');endOverlay.classList.add('hidden');
   $('pendingBanner').classList.remove('show');
   botPlace=null;inHand=false;setSpin(0,0);state='aim';setPowerUI(0);updateHud();
   players.forEach(p=>p.group=null);cur=0;firstHit=null;called=null;botBusy=false;
   setNames();renderSlots();
-  if(mode==='async'){syncAsyncHud();postAsyncState();}
-  toast(mode==='async'?'Fresh table saved — your break':players[0].name+' breaks');showAimHint();
+  if(mode==='async'){syncAsyncHud();}
+  toast(mode==='async'?'Your table is set — break when ready':players[0].name+' breaks');showAimHint();
 }
 
 /* PHYSICS */
@@ -579,16 +732,15 @@ function pocketBall(b,p){
   b.state='sinking';b.pocket=p;b.sinkT=0;b.sx=b.x;b.sy=b.y;b.vx=b.vy=0;
   shotPocketed.push(b.n);if(b.n===8)eightPocket=POCKETS.indexOf(p);
   sfx.pocket();buzz([14,30,22],true);
-  if(b.n===0){score-=50;addFloat(p.x,p.y+(p.y<MIDY?40:-40),'Scratch!','#ef6a57');sfx.bad();buzz([50,40,80],true);}
-  else if(b.n!==8){score+=100;addFloat(clamp(p.x,80,W-80),clamp(p.y+(p.y<MIDY?36:-36),70,H-70),'+100','#ffd966');}
-  updateHud();pop($('hudScore'));
+  if(b.n===0){addFloat(p.x,p.y+(p.y<MIDY?40:-40),'Scratch!','#ef6a57');sfx.bad();buzz([50,40,80],true);}
+  updateHud();
 }
 function sideKick(b,axis){if(b.n!==0||!spinState||!spinState.side)return;const vn=Math.abs(axis==='x'?b.vy:b.vx),tv=axis==='x'?b.vx:b.vy,add=spinState.side*vn*.28*(tv>=0?1:-1);if(axis==='x')b.vx+=add;else b.vy+=add;spinState.side*=.5;}
 function physicsStep(h){
   const n=balls.length;
   for(let i=0;i<n;i++){const b=balls[i];if(b.state!=='active')continue;const sp=Math.hypot(b.vx,b.vy);if(sp===0)continue;const ns=sp-(FRICTION_LIN*Math.min(1,sp/180)+FRICTION_EXP*sp)*h;if(ns<STOP_V){b.vx=b.vy=0;continue;}const f=ns/sp;b.vx*=f;b.vy*=f;b.x+=b.vx*h;b.y+=b.vy*h;}
   for(let i=0;i<n;i++){const a=balls[i];if(a.state!=='active')continue;for(let j=i+1;j<n;j++){const b=balls[j];if(b.state!=='active')continue;const dx=b.x-a.x,dy=b.y-a.y,d2=dx*dx+dy*dy;if(d2>=4*R*R)continue;const d=Math.sqrt(d2)||.0001,nx_=dx/d,ny_=dy/d,ov=(2*R-d)/2;a.x-=nx_*ov;a.y-=ny_*ov;b.x+=nx_*ov;b.y+=ny_*ov;if(firstHit===null&&(a.n===0||b.n===0)){const o=a.n===0?b:a;firstHit=o.n;if(!legalBall(o))wrongRing={x:o.x,y:o.y,t:0};}const rvn=(a.vx-b.vx)*nx_+(a.vy-b.vy)*ny_;if(rvn>0){const j2=(1+REST_BALL)/2*rvn;a.vx-=j2*nx_;a.vy-=j2*ny_;b.vx+=j2*nx_;b.vy+=j2*ny_;if(rvn>frameBallHit)frameBallHit=rvn;if(rvn>40)hitEvents.push(rvn);if(spinState&&!spinState.used&&(a.n===0||b.n===0)){spinState.used=true;const cb=a.n===0?a:b;cb.vx+=spinState.dx*spinState.follow*rvn*.55;cb.vy+=spinState.dy*spinState.follow*rvn*.55;}}}}
-  for(let i=0;i<n;i++){const b=balls[i];if(b.state!=='active')continue;if(b.y-R<T&&solidH(b.x)){b.y=T+R;if(b.vy<0){if(-b.vy>frameWallHit)frameWallHit=-b.vy;b.vy=-b.vy*REST_WALL;b.vx*=.985;sideKick(b,'x');}}if(b.y+R>B&&solidH(b.x)){b.y=B-R;if(b.vy>0){if(b.vy>frameWallHit)frameWallHit=b.vy;b.vy=-b.vy*REST_WALL;b.vx*=.985;sideKick(b,'x');}}if(b.x-R<L&&solidV(b.y)){b.x=L+R;if(b.vx<0){if(-b.vx>frameWallHit)frameWallHit=-b.vx;b.vx=-b.vx*REST_WALL;b.vy*=.985;sideKick(b,'y');}}if(b.x+R>RT&&solidV(b.y)){b.x=RT-R;if(b.vx>0){if(b.vx>frameWallHit)frameWallHit=b.vx;b.vx=-b.vx*REST_WALL;b.vy*=.985;sideKick(b,'y');}}let hit=null;for(const p of POCKETS){const dx=b.x-p.x,dy=b.y-p.y;if(dx*dx+dy*dy<p.r*p.r){hit=p;break;}}if(!hit&&(b.x<L-R*1.2||b.x>RT+R*1.2||b.y<T-R*1.2||b.y>B+R*1.2))hit=POCKETS.reduce((m,p)=>Math.hypot(b.x-p.x,b.y-p.y)<Math.hypot(b.x-m.x,b.y-m.y)?p:m,POCKETS[0]);if(hit)pocketBall(b,hit);}
+  for(let i=0;i<n;i++){const b=balls[i];if(b.state!=='active')continue;if(b.y-R<T&&solidH(b.x)){b.y=T+R;if(b.vy<0){if(b.n)shotRailHit=true;if(-b.vy>frameWallHit)frameWallHit=-b.vy;b.vy=-b.vy*REST_WALL;b.vx*=.985;sideKick(b,'x');}}if(b.y+R>B&&solidH(b.x)){b.y=B-R;if(b.vy>0){if(b.n)shotRailHit=true;if(b.vy>frameWallHit)frameWallHit=b.vy;b.vy=-b.vy*REST_WALL;b.vx*=.985;sideKick(b,'x');}}if(b.x-R<L&&solidV(b.y)){b.x=L+R;if(b.vx<0){if(b.n)shotRailHit=true;if(-b.vx>frameWallHit)frameWallHit=-b.vx;b.vx=-b.vx*REST_WALL;b.vy*=.985;sideKick(b,'y');}}if(b.x+R>RT&&solidV(b.y)){b.x=RT-R;if(b.vx>0){if(b.n)shotRailHit=true;if(b.vx>frameWallHit)frameWallHit=b.vx;b.vx=-b.vx*REST_WALL;b.vy*=.985;sideKick(b,'y');}}let hit=null;for(const p of POCKETS){const dx=b.x-p.x,dy=b.y-p.y;if(dx*dx+dy*dy<p.r*p.r){hit=p;break;}}if(!hit&&(b.x<L-R*1.2||b.x>RT+R*1.2||b.y<T-R*1.2||b.y>B+R*1.2))hit=POCKETS.reduce((m,p)=>Math.hypot(b.x-p.x,b.y-p.y)<Math.hypot(b.x-m.x,b.y-m.y)?p:m,POCKETS[0]);if(hit)pocketBall(b,hit);}
 }
 function stepPhysics(dt){const steps=Math.max(1,Math.ceil(dt/SUB_DT)),h=dt/steps;for(let s=0;s<steps;s++)physicsStep(h);}
 const anyMoving=()=>balls.some(b=>b.state==='sinking'||(b.state==='active'&&(b.vx!==0||b.vy!==0)));
@@ -597,10 +749,42 @@ const anyMoving=()=>balls.some(b=>b.state==='sinking'||(b.state==='active'&&(b.v
 function shoot(power,remote,rspin){
   if(state!=='aim'||(!remote&&!myTurn()))return;
   if(!remote&&eightPhase()&&called===null){toast('Tap a pocket first',1800);setPowerUI(0);return;}
+  preShotObjLeft=players[cur].group?left(players[cur].group):0;
+  if(!remote&&TURN_BASED){
+    turnShotsReplay.push({
+      angle:+aimAngle.toFixed(5),
+      power:+Number(power).toFixed(4),
+      spin:{x:+spin.x.toFixed(3),y:+spin.y.toFixed(3)},
+      cue_ball_placement:inHand?{x:+balls[0].x.toFixed(1),y:+balls[0].y.toFixed(1)}:null,
+      called:typeof called==='number'?called:null
+    });
+  }
   ensureAudio();
-  shots++;shotPocketed=[];moveTime=0;settleTimer=0;firstHit=null;
+  // Start the strict 1-minute run clock on the player's very first shot --
+  // NOT on load, NOT before the table is theirs, ONLY on first action.
+  if(!remote&&!firstShotFired&&isTimedRun()){
+    firstShotFired=true;
+    startTurnTimer();
+    // The arena's clock starts on the same beat, never before.
+    try{window.parent.postMessage({type:'oddzone:run-started'},'*');}catch(e){}
+  }
+  shots++;shotPocketed=[];moveTime=0;settleTimer=0;firstHit=null;shotRailHit=false;
   strike={t:0,dur:.09,from:power*MAX_VIS_PULL,power,angle:aimAngle,spin:remote?(rspin||{x:0,y:0}):{x:spin.x,y:spin.y}};
   if(!remote)setSpin(0,0);
+  // Every locally-played shot is logged, so the submitted run carries the full
+  // sequence and a disputed score can be re-simulated without trusting the
+  // browser. Async runs log them ALL -- not just the stake-backed ones.
+  if(!remote&&(SOLO_MODE||mode==='async')){
+    SHOT_LOG.push({
+      n: shots, power: +strike.power.toFixed(4), angle: +strike.angle.toFixed(5),
+      spin: { x: +strike.spin.x.toFixed(3), y: +strike.spin.y.toFixed(3) },
+      called: typeof called === 'number' ? called : null,
+      t: Date.now()
+    });
+  }
+  // Live duels: the shot is decided here and the opponent replays the exact
+  // same parameters, so both simulations start from an identical table.
+  if(!remote&&mode==='online')liveBroadcastShot(strike);
   state='striking';setPowerUI(power);updateHud();pop($('hudShots'));
   canvas.style.cursor='default';
 }
@@ -611,7 +795,7 @@ function fireCue(){
   sfx.cue(p);buzz(12,true);strike=null;state='moving';
 }
 
-const players=[{name:'You',group:null},{name:'Computer',group:null}];
+const players=[{name:'You',group:null},{name:'You',group:null}];
 let cur=0,firstHit=null;
 const grp=n=>n===8?'x':n<8?'s':'t';
 const left=g=>balls.filter(b=>b.n&&grp(b.n)===g&&b.state==='active').length;
@@ -624,55 +808,825 @@ function renderSlots(){
 }
 
 function endShot(){
+  // The arena clock is held until the rack is actually being played. The first
+  // shot is the honest start signal -- not the iframe's first frame, which can
+  // otherwise spend the whole 2 minutes on a matchmaking screen. Done here, at
+  // the top, because the 8-ball branch below returns before the tail of this
+  // function.
+  if(!replayPlayback&&(mode==='async'||isTimedRun())&&!asyncState.timerReleased){
+    asyncState.timerReleased=true;
+    try{window.parent.postMessage({type:'oddzone:first-shot'},'*');}catch(e){}
+  }
   const pk=shotPocketed,scratch=pk.includes(0),me=players[cur],objs=pk.filter(n=>n&&n!==8);
+  const shooter=cur;
   if(pk.includes(8)){
-    const cleared=!!me.group&&left(me.group)===0;
+    const cleared=!!me.group&&preShotObjLeft===0;
     const ok=cleared&&!scratch&&called!==null&&eightPocket===called&&firstHit===8;
+    recordTurnShotResult();
+    if(TURN_BASED){
+      if(!replayPlayback)void finishPoolTurn(ok?shooter:1-shooter,ok?'Sank the 8-ball!':!cleared?'8-ball too early':scratch?'Scratched on 8-ball':'Wrong pocket');
+      return;
+    }
     finishGame(ok?cur:1-cur,ok?'Sank the 8-ball!':!cleared?'8-ball too early':scratch?'Scratched on 8-ball':'Wrong pocket'); return;
   }
-  let foul=scratch||firstHit===null;
-  if(!foul){if(me.group)foul=firstHit===8?left(me.group)>0:grp(firstHit)!==me.group;else foul=firstHit===8;}
+  let foul=scratch||firstHit===null||(!objs.length&&!shotRailHit);
+  if(!foul){if(me.group)foul=firstHit===8?preShotObjLeft>0:grp(firstHit)!==me.group;else foul=firstHit===8;}
   let assigned='';
   if(!foul&&!me.group&&objs.length){me.group=grp(objs[0]);players[1-cur].group=me.group==='s'?'t':'s';assigned=me.name+(me.name==='You'?' have ':' has ')+(me.group==='s'?'solids':'stripes')+'. ';}
   const keep=!foul&&objs.some(n=>grp(n)===me.group);
   if(scratch)placeCue();
   if(!keep)cur=1-cur;
-  const hand=scratch&&!(mode==='bot'&&cur===1),botHand=scratch&&mode==='bot'&&cur===1;
-  toast(assigned+(foul?(scratch?'Scratch! ':firstHit===null?'Foul: no ball! ':'Foul: wrong ball! '):'')+(keep?'Shoot again ':players[cur].name+' to shoot')+(eightPhase()?'. Tap a pocket':'')+'.', 2600);
-  inHand=hand||botHand;state=(hand||botHand)?'place':'aim';called=null;if(botHand)startBotPlace();
+  const hand=foul,botHand=false;
+  // NO TURN HAND-OFF TO NAME. In an async run `cur` can flip to 1 after a
+  // miss, which used to produce "Challenger to shoot" on the player's OWN
+  // device -- i.e. it told them to pass control to someone who is not there.
+  // Async is one continuous run: the only thing worth saying is whether THIS
+  // player shoots again or gets ball-in-hand.
+  const turnLine = mode==='async'
+    ? (keep ? 'Shoot again' : (hand ? 'Ball in hand — place the cue' : 'Your run continues'))
+    : (keep ? 'Shoot again' : players[cur].name+' to shoot');
+  toast(assigned+(foul?(scratch?'Scratch! ':firstHit===null?'Foul: no ball! ':'Foul: wrong ball! '):'')+turnLine+(eightPhase()?'. Tap a pocket':'')+'.', 2600);
+  inHand=hand||botHand;state=(hand||botHand)?'place':'aim';called=null;
   canvas.style.cursor='crosshair';setPowerUI(0);updateHud();
-  // Async: persist the table and hand the turn to the other device.
-  if(mode==='async'){
-    postAsyncState();
-    const mine=asyncState.mySeat;
-    // Keep shooting? then it stays our turn; otherwise lock the table.
-    if(cur!==mine){state='wait';syncAsyncHud();toast('Saved — waiting for your rival',2200);}
-    else{syncAsyncHud();toast('Saved — you shoot again',1800);}
+  recordTurnShotResult();
+  // Async: NOTHING is published per shot. This player's run is theirs alone
+  // until the clock stops; the rival sees the finished table afterwards, never
+  // a half-played one, and control never leaves this device mid-run.
+  if(mode==='async'){syncAsyncHud();}
+  // Live duel: this is the turn hand-off. Authoritative state comes from the
+  // shooter; the receiver only ever renders what it is told.
+  if(mode==='online')liveAfterShot();
+  if(replayPlayback){
+    replayPlayback.timer=window.setTimeout(advancePoolReplay,260);
+    return;
+  }
+  if(TURN_BASED&&(!keep||turnExpiryPending)){
+    const reason=turnExpiryPending?'Time up':foul?(scratch?'Foul — scratch':'Foul — turn passed'):'Turn passed';
+    void endPoolTurn(reason);
   }
 }
+
+/* MODES — declared here, before the live-duel block that uses them.
+ * 'solo' replaces the old 'bot' mode: you play every turn on the same table
+ * and there is no computer opponent anywhere in the game. */
+let mode='solo',net=null,myRole=null,botBusy=false;
+let finalizeReported=false;   // live duel: guards one settlement per device
+
+/* ================================================================== *
+ * LIVE 2-PLAYER DUEL  (Supabase Realtime broadcast)
+ *
+ * A duel lives on one broadcast channel, `duel_room_<matchId>`. Two roles:
+ *   seat 0 = Host (breaks)
+ *   seat 1 = Guest
+ *
+ * WHY BROADCAST AND NOT A SHARED ROW: a shot is a short burst of decisions,
+ * not a document. The shooter owns the table and publishes the shot; the
+ * opponent replays it. Only two kinds of message ever cross the wire —
+ * `shot` (angle/power/spin, then the authoritative result) and `sync`
+ * (the full table, used to recover a dropped packet or a late join).
+ *
+ * TRUST: broadcast frames are unauthenticated and anyone who knows the
+ * match id can send one, so a received shot is sanity-checked and always
+ * replayed by the local engine rather than applied as a score.
+ * ================================================================== */
+const LIVE = {
+  matchId: null,     // the match / challenge id this room is bound to
+  seat: null,        // 0 = Host/Breaker, 1 = Guest
+  channel: null,     // the realtime channel
+  connected: false,
+  rivalPresent: false,
+  pending: null,     // shot sent, waiting for the shooter's result
+  lastShotAt: 0      // guards against duplicate shot frames
+};
+
+const LIVE_CHANNEL_PREFIX = 'duel_room_';
+const LIVE_SHOT_TIMEOUT_MS = 8000;
+
+/** Channel name for a match. Kept in one place so both sides agree. */
+function liveChannelName(matchId){ return LIVE_CHANNEL_PREFIX + String(matchId); }
+
+/** The live room only runs for a real, identified match. */
+function liveAvailable(){ return !!getSB() && !!LIVE.matchId; }
+
+/** True when this device's seat is the one that may shoot. */
+function liveMyTurn(){ return LIVE.seat !== null && cur === LIVE.seat; }
+
+function liveStatus(msg){
+  const el = $('liveBadge');
+  if (el) { el.textContent = msg; el.classList.remove('wait'); }
+}
+
+/** Compact table serialisation — the same shape the async engine uses. */
+function liveTableState(){
+  return {
+    balls: balls.map(b => [Math.round(b.x*10)/10, Math.round(b.y*10)/10, b.state === 'active' ? 1 : 0]),
+    groups: [players[0].group, players[1].group],
+    cur, shots, score, hand: inHand,
+    called: typeof called === 'number' ? called : null,
+    over: state === 'over' ? [cur === 0 ? 0 : 1, 'Finished'] : null
+  };
+}
+
+function liveBroadcast(event, payload){
+  if (!LIVE.channel || !LIVE.connected) return false;
+  try {
+    LIVE.channel.send({ type: 'broadcast', event, payload });
+    return true;
+  } catch (e) {
+    console.warn('[8-ball] live broadcast failed:', e);
+    return false;
+  }
+}
+
+/** Tell the opponent exactly what was shot, so it can replay it verbatim. */
+function liveBroadcastShot(strikeShot){
+  LIVE.pending = { power: strikeShot.power, angle: strikeShot.angle };
+  LIVE.lastShotAt = performance.now();
+  liveBroadcast('shot', {
+    kind: 'live-shot',       // not a score — receivers ignore bare score frames
+    seat: LIVE.seat,
+    angle: strikeShot.angle,
+    power: strikeShot.power,
+    spin: { x: strikeShot.spin.x, y: strikeShot.spin.y },
+    // The pre-shot table lets the receiver verify it is simulating the same
+    // layout instead of guessing at a desync later.
+    table: liveTableState()
+  });
+}
+
+/** After the local physics settles: publish the authoritative result. */
+function liveAfterShot(){
+  const chained = cur === LIVE.seat;   // kept the turn
+  liveBroadcast('shot', {
+    kind: 'live-result',
+    seat: LIVE.seat,
+    table: liveTableState(),
+    pocketed: shotPocketed.slice(),
+    keep: chained
+  });
+  if (chained) toast('Nice — shoot again', 1400);
+  else toast("Rival's turn", 1400);
+  if (state === 'over') liveBroadcastResult();
+}
+
+/** Apply a shot received from the opponent and run the same physics. */
+function liveApplyShot(msg){
+  if (LIVE.seat === null || msg.seat === LIVE.seat) return;          // our own echo
+  if (state === 'over') return;
+  // Too fast to be real: a legitimate shot needs a full settle cycle. This is
+  // what stops a flood of frames from yanking the table around.
+  if (performance.now() - LIVE.lastShotAt < 250) return;
+  const power = Number(msg.power);
+  const angle = Number(msg.angle);
+  if (!Number.isFinite(power) || power < 0 || power > 1) return;
+  if (!Number.isFinite(angle)) return;
+
+  LIVE.pending = null;
+  LIVE.lastShotAt = performance.now();
+
+  // If the tables disagree, trust the shooter's table — they are authoritative.
+  if (msg.table) liveApplyTable(msg.table, false);
+  else toast('Rival is shooting', 1200);
+
+  // Replay with the received parameters. `remote` makes shoot() bypass the
+  // local-turn check and skip re-broadcasting.
+  if (state === 'aim' || state === 'wait') {
+    cur = msg.seat;
+    state = 'aim';
+    shoot(Math.min(1, power), true, { x: Number(msg.spin?.x) || 0, y: Number(msg.spin?.y) || 0 });
+  }
+}
+
+/** Apply the shooter's authoritative result table. */
+function liveApplyResult(msg){
+  if (LIVE.seat === null || msg.seat === LIVE.seat) return;
+  if (msg.table) liveApplyTable(msg.table, msg.keep !== true);
+  if (msg.table && msg.table.over) {
+    state = 'over';
+    const winner = msg.table.over[0] === LIVE.seat ? 'You win!' : 'Rival wins';
+    toast(winner, 2400);
+  }
+}
+
+/** Map a serialised table onto the live engine (same shape as applySnapshot). */
+function liveApplyTable(sn, mayAct){
+  if (!sn || !Array.isArray(sn.balls)) return;
+  sn.balls.forEach((a, i) => {
+    const b = balls[i];
+    if (!b) return;
+    if (a[2]) resetBall(b, a[0], a[1]);
+    else { b.state = 'pocketed'; b.vx = b.vy = 0; }
+  });
+  players[0].group = sn.groups ? sn.groups[0] : null;
+  players[1].group = sn.groups ? sn.groups[1] : null;
+  cur = sn.cur | 0;
+  shots = sn.shots | 0;
+  score = 0;
+  inHand = !!sn.hand;
+  called = typeof sn.called === 'number' ? sn.called : null;
+  strike = null; floats.length = 0; shotPocketed = []; botPlace = null; botBusy = false;
+  if (sn.over) { state = 'over'; }
+  else state = inHand ? (mayAct ? 'place' : 'wait') : (mayAct ? 'aim' : 'wait');
+  setPowerUI(0); updateHud(); renderSlots(); liveSyncHud();
+}
+
+/** HUD: name columns follow this device's seat, same convention as async. */
+function liveSyncHud(){
+  // Score-backed rack: a provisional 'online' status must not re-label the
+  // columns as You/Rival and throw away the challenger's name.
+  if (SOLO_BACKED && SOLO_ACCEPTER) { soloLabelNames(); soloTimerBanner(); return; }
+  if (mode !== 'online' || LIVE.seat === null) return;
+  const mine = LIVE.seat, theirs = 1 - mine;
+  // Each column is labelled from THIS device's point of view: the seat I own
+  // reads "You", the other reads "Rival". (The old rule compared `theirs`
+  // to 1, which is true exactly when I am seat 0 — so both columns said "You".)
+  players[0].name = mine === 0 ? 'You' : 'Rival';
+  players[1].name = mine === 1 ? 'You' : 'Rival';
+  if ($('nm0')) $('nm0').textContent = players[0].name;
+  if ($('nm1')) $('nm1').textContent = players[1].name;
+  if ($('av0')) $('av0').textContent = mine === 0 ? '😎' : '🐶';
+  if ($('av1')) $('av1').textContent = mine === 1 ? '😎' : '🐶';
+  renderSlots();
+  const badge = $('liveBadge');
+  if (badge) {
+    // An async run has no rival turn to wait for: this device is the only one
+    // shooting, so the badge never says "rival is shooting".
+    if (mode === 'async') {
+      badge.textContent = state === 'over' ? 'Run finished' : 'Your run';
+      badge.classList.remove('wait');
+    } else {
+      badge.textContent = state === 'over' ? 'Finished'
+        : !LIVE.rivalPresent ? 'Waiting for rival…'
+        : liveMyTurn() ? 'Your turn' : 'Rival is shooting…';
+      badge.classList.toggle('wait', !liveMyTurn());
+    }
+  }
+  // The boot sequence registers its own presence handler here rather than
+  // monkey-patching this function, so there is one source of truth.
+  if (typeof livePresenceListener === 'function') { try { livePresenceListener(); } catch (e) {} }
+}
+
+/* Set by bootLiveDuel(); called whenever presence or turn state changes. */
+var livePresenceListener = null;
+
+/**
+ * Join the duel room.
+ *
+ * @param {string} matchId  the duel / challenge id
+ * @param {number} seat     0 = Host (breaker), 1 = Guest
+ * @param {object} opts     { reset: true } to re-rack and break from seat 0
+ */
+async function liveJoin(matchId, seat, opts){
+  const options = opts || {};
+  if (!matchId) throw new Error('A match id is required for a live duel.');
+  const sb = getSB();
+  if (!sb) throw new Error('Realtime is unavailable (Supabase failed to load).');
+
+  liveLeave();                       // never stack two rooms
+  LIVE.matchId = String(matchId);
+  LIVE.seat = seat === 1 ? 1 : 0;
+  LIVE.rivalPresent = false;
+  LIVE.pending = null;
+  mode = 'online';
+
+  LIVE.channel = sb.channel(liveChannelName(LIVE.matchId), {
+    config: { broadcast: { self: false }, presence: { key: String(LIVE.seat) } }
+  });
+
+  LIVE.channel.on('broadcast', { event: 'shot' }, ({ payload }) => {
+    if (!payload) return;
+    if (payload.kind === 'live-shot') liveApplyShot(payload);
+    else if (payload.kind === 'live-result') liveApplyResult(payload);
+    // A frame without `kind` is not ours (or is a legacy score post) — ignore
+    // it rather than letting an arbitrary score mutate the table.
+  });
+  LIVE.channel.on('broadcast', { event: 'sync-request' }, ({ payload }) => {
+    if (!payload || payload.seat === LIVE.seat) return;
+    liveBroadcast('sync', { kind: 'live-sync', seat: LIVE.seat, table: liveTableState() });
+  });
+  LIVE.channel.on('broadcast', { event: 'sync' }, ({ payload }) => {
+    if (!payload || payload.seat === LIVE.seat || !payload.table) return;
+    liveApplyTable(payload.table, payload.table.cur !== LIVE.seat);
+  });
+
+  // Presence is what tells us the opponent has actually arrived; a broadcast
+  // sent into an empty room is silently dropped, so the breaker must wait.
+  LIVE.channel.on('presence', { event: 'sync' }, () => {
+    // presenceState() is keyed by whatever was passed to track(), not by the
+    // seat number, so derive each participant's seat from its payload. Counting
+    // keys directly silently reported "no rival" even when both seats were up.
+    const st = LIVE.channel.presenceState() || {};
+    const seats = new Set();
+    Object.keys(st).forEach((key) => {
+      const entries = st[key];
+      const list = Array.isArray(entries) ? entries : [entries];
+      let recorded = false;
+      list.forEach((entry) => {
+        if (!entry) return;
+        if (typeof entry.seat === 'number') { seats.add(entry.seat); recorded = true; }
+      });
+      // Fall back to the key when the payload carried no seat (e.g. an older
+      // client, or a track() that omitted it).
+      if (!recorded && /^[01]$/.test(String(key))) seats.add(Number(key));
+    });
+    LIVE.rivalPresent = seats.has(1 - LIVE.seat);
+    liveSyncHud();
+  });
+
+  await new Promise((resolve) => {
+    LIVE.channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        LIVE.connected = true;
+        try { LIVE.channel.track({ seat: LIVE.seat, at: Date.now() }); } catch (e) {}
+        liveStatus('Connected');
+        resolve();
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        LIVE.connected = false;
+        liveStatus('Reconnecting…');
+        resolve();
+      }
+    });
+  });
+
+  if (options.reset !== false) {
+    finalizeReported = false;
+    newGame();                        // seat 0 breaks
+    if (LIVE.seat !== 0) state = 'wait';
+  }
+  setNames();
+  liveSyncHud();
+  // Ask the other side for the current table in case we joined mid-match.
+  liveBroadcast('sync-request', { seat: LIVE.seat });
+  void (async () => { if (!LIVE.matchId) return; })();
+  return LIVE.matchId;
+}
+
+function liveLeave(){
+  if (LIVE.channel) {
+    try { LIVE.channel.unsubscribe(); } catch (e) {}
+    try { getSB()?.removeChannel(LIVE.channel); } catch (e) {}
+  }
+  LIVE.channel = null;
+  LIVE.connected = false;
+  LIVE.rivalPresent = false;
+  LIVE.pending = null;
+  // Was `mode = 'bot'`. The computer opponent no longer exists: a live mode
+  // leaving the room drops to 'solo'.
+  if (mode === 'online') mode = 'solo';
+}
+
+const liveScore = () => Math.max(0, Math.floor(Number(window.__oddzoneReadScore()) || 0));
+
+/**
+ * Settle the duel once the rack is decided.
+ *
+ * Runs on BOTH devices: the shooter reports first (its table is
+ * authoritative), and the loser's report is sent too so a dropped shooter
+ * frame cannot leave the match unsettled. settle_duel() is idempotent
+ * server-side, so a double report is harmless.
+ */
+function liveBroadcastResult(resultScore){
+  const payload = {
+    kind: 'live-settle',
+    seat: LIVE.seat,
+    score: Number.isFinite(resultScore) ? resultScore : liveScore(),
+    finishedAt: new Date().toISOString()
+  };
+  liveBroadcast('result', payload);
+  void liveSettle(payload.score, 'broadcast');
+}
+
+async function liveSettle(myScore, source){
+  const finalScore = Number.isFinite(myScore) ? myScore : liveScore();
+  reportComplete();                     // end the arena timer without points
+  const challengeId = LIVE.matchId || CHALLENGE_ID;
+  const sb = getSB();
+  if (!sb || !challengeId) {
+    console.warn('[8-ball] live settle skipped: no backend or match id');
+    return { ok: false, reason: 'not_configured' };
+  }
+  try {
+    const { data, error } = await sb.rpc('settle_duel', {
+      p_challenge_id: String(challengeId),
+      p_score: finalScore
+    });
+    if (error) throw error;
+    liveStatus('Result settled');
+    return { ok: true, data, source };
+  } catch (e) {
+    console.warn('[8-ball] settle_duel failed:', e);
+    liveStatus('Result pending');
+    // Keep the local record so the result is not lost if the RPC is offline.
+    await submitMatchScore(finalScore, {
+      shots, ballsPocketed: parseInt($('hudPocketed').textContent) || 0,
+      won: finalScore === 1, mode: '8ball-live', challengeId
+    }).catch(() => {});
+    return { ok: false, error: e };
+  }
+}
+
+// Expose the room controls to the host page and to QA harnesses.
+window.__oddzoneLiveJoin = (matchId, seat, opts) => liveJoin(matchId, seat, opts);
+window.__oddzoneLiveLeave = () => liveLeave();
+window.__oddzoneLiveState = () => ({
+  matchId: LIVE.matchId, seat: LIVE.seat, channel: LIVE.channel ? liveChannelName(LIVE.matchId) : null,
+  connected: LIVE.connected, rivalPresent: LIVE.rivalPresent, myTurn: liveMyTurn(), mode, state, cur
+});
 function finishGame(w,reason,remote){
+  if(state==='over')return;
   state='over';canvas.style.cursor='default';updateHud();
-  if(!remote&&mode==='async'){asyncWinner=w;asyncEndReason=reason;savePendingBanner(w,reason);postAsyncState();reportComplete(score);}
-  const won=w===0; // Player 0 = "You"
-  const finalScore=score+(won?500:0);
-  if(finalScore>best){best=finalScore;try{localStorage.setItem('pool8_best',best);}catch(e){}}
-  $('endTitle').textContent=players[w].name==='You'?'🏆 You Win!':players[w].name+' wins!';
-  $('endScore').textContent=finalScore;$('endRating').textContent=reason+' · '+shots+' shots';
-  $('endTable').innerHTML='<tr><td>Balls pocketed</td><td>'+$('hudPocketed').textContent+'/15</td></tr><tr class="total"><td>Final Score</td><td>'+finalScore+'</td></tr>';
-  setTimeout(()=>endOverlay.classList.remove('hidden'),900);
+  stopTurnTimer(); // stop 60-s turn timer if running
+  // Live duel: report a win/loss value, not a pocket-based point total.
+  const liveDone = mode==='online' && !finalizeReported;
+  if(liveDone) finalizeReported = true;
+  const timedOut=/^Time(?: up| ended)$/i.test(String(reason||''));
+  const won=(mode==='online'?w===LIVE.seat:w===0) && !timedOut;
+  const finalScore=won?1:0;
+  // An async run has no single opponent on screen: whoever's seat "won" the
+  // rack, the headline must not shout "You Win!" over a score that is only
+  // banked until a rival plays it. The duel result comes from settle_duel.
+  $('endTitle').textContent = SOLO_BACKED
+    ? 'Run Complete'
+    : (players[w].name==='You'?'🏆 You Win!':players[w].name+' wins!');
+  $('endScore').textContent=won?'WIN':'LOSS';$('endRating').textContent=reason+' · '+shots+' shots';
+  $('endTable').innerHTML='<tr><td>Balls pocketed</td><td>'+$('hudPocketed').textContent+'/15</td></tr><tr class="total"><td>Shots taken</td><td>'+shots+'</td></tr>';
+  if(!SOLO_BACKED&&mode!=='async')setTimeout(()=>endOverlay.classList.remove('hidden'),900);
   const status=$('saveStatus');status.textContent='Saving result…';
-  reportComplete(finalScore);
-  submitMatchScore(finalScore,{opponentScore:w===1?finalScore-score:0,shots,ballsPocketed:parseInt($('hudPocketed').textContent),won,mode:'8ball',challengeId:CHALLENGE_ID})
+  if(!SOLO_BACKED&&mode!=='async')reportComplete(finalScore);
+  // Live stake settlement goes through settle_duel(), not a direct table write.
+  if(liveDone){ liveBroadcastResult(won?1:0); return; }
+  // Legacy independent-rack mode: submit a win/loss result once.
+  //
+  // Player A stores the completed rack so a rival can accept the challenge.
+  // Player B submits a win/loss result through settle_duel().
+  // Both runs are uploaded to their own pool_matches row before the challenge
+  // score is settled; the accepting player's row is not discoverable as open.
+  if(SOLO_BACKED){
+    const outcome = { winner: w, reason, score: finalScore };
+    const retryButton=$('btnRetrySettlement');
+    const againButton=$('btnAgain');
+    if(againButton)againButton.disabled=true;
+    if(retryButton){
+      retryButton.classList.add('hidden');
+      retryButton.onclick=()=>{void submitSoloFinalRun(finalScore,outcome);};
+    }
+    asyncRunBanner('🎱 Rack complete. Confirming the match result…');
+    status.textContent='Uploading final result…';
+    void submitSoloFinalRun(finalScore,outcome);
+    return;
+  }
+  if(mode==='async'&&!remote){
+    asyncWinner=w;asyncEndReason=reason;
+    const outcome={winner:w,reason,score:finalScore};
+    const retryButton=$('btnRetrySettlement');
+    const againButton=$('btnAgain');
+    if(againButton)againButton.disabled=true;
+    if(retryButton){
+      retryButton.classList.add('hidden');
+      retryButton.onclick=()=>{void submitRun(outcome);};
+    }
+    asyncRunBanner('Rack complete. Confirming the match result…');
+    status.textContent='Uploading final result…';
+    void submitRun(outcome);
+    return;
+  }
+  submitMatchScore(finalScore,{opponentScore:won?0:1,shots,ballsPocketed:parseInt($('hudPocketed').textContent),won,mode:'8ball',challengeId:CHALLENGE_ID})
     .then(res=>{status.textContent=res.mode==='supabase'?'Result saved to OddZone.':'Result recorded locally.';})
     .catch(err=>{status.textContent='Save error: '+(err.message||'check connection');});
 }
-window.__oddzone_forceEnd = () => { if(state!=='over') finishGame(0, 'Time ended'); };
+
+
+function poolBallPositions(){
+  return balls.map(b=>[Math.round(b.x*10)/10,Math.round(b.y*10)/10,b.state==='active'?1:0]);
+}
+function restorePoolBallPositions(positions){
+  if(!Array.isArray(positions))return;
+  positions.forEach((position,index)=>{
+    const ball=balls[index];
+    if(!ball||!Array.isArray(position))return;
+    if(position[2])resetBall(ball,Number(position[0])||0,Number(position[1])||0);
+    else{ball.state='pocketed';ball.vx=ball.vy=0;ball.pocket=null;ball.sinkT=0;}
+  });
+  strike=null;shotPocketed=[];floats.length=0;updateHud();
+}
+function recordTurnShotResult(){
+  if(!TURN_BASED||replayPlayback||!turnShotsReplay.length)return;
+  const shot=turnShotsReplay[turnShotsReplay.length-1];
+  shot.pocketed=shotPocketed.slice();
+  shot.first_hit=firstHit;
+  shot.post_balls=poolBallPositions();
+}
+function beginPoolTurnCapture(){
+  turnPreTurnBalls=poolBallPositions();
+  turnPreTurnState=snapshot([]);
+  turnShotsReplay=[];
+}
+function turnPoolSnapshot(){
+  const saved=snapshot([]);
+  saved.currentTurn=cur;
+  saved.turnSeat=TURN_SEAT;
+  saved.turnNumber=(asyncState.turnNumber||0)+1;
+  saved.hand=inHand;
+  saved.pre_turn_balls=turnPreTurnBalls||poolBallPositions();
+  saved.pre_turn_state=turnPreTurnState||snapshot([]);
+  saved.shots_replay=turnShotsReplay;
+  saved.post_turn_balls=poolBallPositions();
+  saved.last_turn_seat=TURN_SEAT;
+  return saved;
+}
+
+function finishPoolReplay(){
+  if(!replayPlayback)return;
+  clearTimeout(replayPlayback.timer);
+  const replay=replayPlayback;
+  replayPlayback=null;
+  $('skipReplay').classList.add('hidden');
+  strike=null;shotPocketed=[];floats.length=0;botPlace=null;
+  applySnapshot(Object.assign({},replay.finalState,{balls:replay.postBalls}),true);
+  cur=TURN_SEAT;
+  state=inHand?'place':'aim';
+  turnBasedNames();liveSetCueEnabled(true);
+  turnExpiryPending=false;
+  beginPoolTurnCapture();
+  setPowerUI(0);updateHud();renderSlots();
+  toast('Replay complete — your turn',2200);
+}
+function advancePoolReplay(){
+  if(!replayPlayback)return;
+  if(replayPlayback.index>0){
+    const previous=replayPlayback.shots[replayPlayback.index-1];
+    if(Array.isArray(previous.post_balls))restorePoolBallPositions(previous.post_balls);
+  }
+  if(replayPlayback.index>=replayPlayback.shots.length){finishPoolReplay();return;}
+  const shot=replayPlayback.shots[replayPlayback.index++];
+  const placement=shot.cue_ball_placement;
+  if(placement&&Number.isFinite(Number(placement.x))&&Number.isFinite(Number(placement.y))){
+    resetBall(balls[0],Number(placement.x),Number(placement.y));
+  }
+  cur=replayPlayback.seat;
+  state='aim';inHand=false;
+  aimAngle=Number(shot.angle)||0;
+  called=Number.isInteger(shot.called)?shot.called:null;
+  setSpin(Number(shot.spin?.x)||0,Number(shot.spin?.y)||0);
+  const power=clamp(Number(shot.power)||0,0,1);
+  if(power<0.03){finishPoolReplay();return;}
+  shoot(power,true,shot.spin||{x:0,y:0});
+}
+function startPoolReplay(finalState,preState,shots,postBalls,lastSeat){
+  if(!Array.isArray(shots)||!shots.length||!Array.isArray(postBalls)){
+    beginPoolTurnCapture();
+    return false;
+  }
+  const startState=preState&&Array.isArray(preState.balls)
+    ?preState:Object.assign({},finalState,{balls:Array.isArray(finalState.pre_turn_balls)?finalState.pre_turn_balls:postBalls});
+  applySnapshot(startState,false);
+  cur=Number.isInteger(Number(lastSeat))?Number(lastSeat):1-TURN_SEAT;
+  state='wait';liveSetCueEnabled(false);
+  turnBasedNames();
+  replayPlayback={shots,index:0,finalState,postBalls,seat:cur,timer:null};
+  $('skipReplay').classList.remove('hidden');
+  toast('Watching your opponent’s turn…',2200);
+  advancePoolReplay();
+  return true;
+}
+
+async function savePoolTurn(isFinal,winnerSeat,reason){
+  if(turnSaveInProgress)throw new Error('A pool turn is already being saved.');
+  const sb=getSB();
+  if(!sb)throw new Error('Supabase is unavailable. Check your connection and sign-in.');
+  turnSaveInProgress=true;
+  try{
+    const{data,error}=await sb.rpc('save_pool_turn',{
+      p_challenge_id:String(SOLO_MATCH_ID),
+      p_expected_turn:TURN_SEAT,
+      p_state:turnPoolSnapshot(),
+      p_is_final:!!isFinal,
+      p_winner_seat:isFinal?winnerSeat:null,
+      p_reason:reason||''
+    });
+    if(error)throw error;
+    if(!data||typeof data!=='object')throw new Error('The server did not confirm the pool turn.');
+    asyncState.turnNumber=Number(data.turn_number)||asyncState.turnNumber||0;
+    return data;
+  }finally{turnSaveInProgress=false;}
+}
+
+async function endPoolTurn(reason){
+  if(!TURN_BASED||state==='over'||turnSaveInProgress)return;
+  stopTurnTimer();
+  const timerBox=$('turnTimerBox');if(timerBox)timerBox.style.display='none';
+  turnExpiryPending=false;
+  state='wait';
+  const nextSeat=1-TURN_SEAT;
+  cur=nextSeat;
+  const hand=!!inHand;
+  const status=$('saveStatus');
+  if(status)status.textContent='Saving the table…';
+  try{
+    const saved=await savePoolTurn(false,null,reason);
+    poolOwnChallengeId=String(saved.player_challenge_id||poolOwnChallengeId||SOLO_MATCH_ID);
+    state='over';
+    turnBasedNames();
+    waitOverlayHide();
+    const paired=saved.opponent_joined===true;
+    const opponentName=String(saved.opponent_name||'Opponent');
+    const lobbyStatus={type:'oddzone:pool-turn-sent',challengeId:poolOwnChallengeId,nextTurn:nextSeat,paired,opponentName};
+    $('endTitle').textContent=paired?'Paired with '+opponentName+' — Waiting for their turn':'Turn Sent! Searching for opponent...';
+    $('endScore').textContent='TURN SAVED';
+    $('endRating').textContent=paired
+      ?'Your turn is saved. You can check back when your opponent has played.'
+      :"Your turn is saved. You can leave now and check the match status later.";
+    $('endTable').innerHTML='<tr><td>Turn</td><td>'+String(asyncState.turnNumber)+'</td></tr><tr><td>Shots taken</td><td>'+String(shots)+'</td></tr>';
+    if(status)status.textContent=paired?'Waiting for '+opponentName+' to finish their turn.':'Searching for an opponent. Your table is saved.';
+    asyncRunBanner(paired?'Paired with '+opponentName+' — Waiting for their turn':'Turn Sent! Searching for opponent...');
+    $('btnAgain').classList.add('hidden');
+    $('btnCheckStatus').classList.remove('hidden');
+    const back=$('btnBack');
+    if(back){
+      back.textContent='Back to Lobby';
+      back.onclick=()=>window.parent.postMessage(lobbyStatus,'*');
+    }
+    endOverlay.classList.remove('hidden');
+    try{window.parent.postMessage({type:'oddzone:pool-turn-saved',challengeId:poolOwnChallengeId},'*');}catch(e){}
+  }catch(error){
+    console.error('[8-ball] could not save pool turn:',error);
+    state='aim';
+    cur=TURN_SEAT;
+    inHand=hand;
+    turnExpiryPending=true;
+    if(status)status.textContent='Turn not saved. Check your connection, then retry.';
+    $('endTitle').textContent='Turn Save Pending';
+    $('btnRetrySettlement').classList.remove('hidden');
+    $('btnRetrySettlement').textContent='Retry turn handoff';
+    $('btnRetrySettlement').onclick=()=>void endPoolTurn(reason);
+    endOverlay.classList.remove('hidden');
+  }
+}
+
+async function finishPoolTurn(winnerSeat,reason){
+  if(!TURN_BASED||turnSaveInProgress||(terminalTurnSaved&&winnerSeat!==asyncWinner))return;
+  state='over';stopTurnTimer();updateHud();
+  asyncWinner=winnerSeat;asyncEndReason=reason;
+  const localWinner=winnerSeat===TURN_SEAT;
+  $('endTitle').textContent='Confirming result…';
+  $('endScore').textContent=winnerSeat===TURN_SEAT?'WIN':'LOSS';
+  $('endRating').textContent=reason+' · '+shots+' shots';
+  $('endTable').innerHTML='<tr><td>Winner</td><td>'+(localWinner?'You':'Opponent')+'</td></tr><tr><td>Shots taken</td><td>'+String(shots)+'</td></tr>';
+  $('saveStatus').textContent='Saving official result…';
+  $('btnAgain').disabled=true;
+  const retry=$('btnRetrySettlement');
+  retry.disabled=true;
+  retry.textContent='Confirming…';
+  retry.onclick=()=>void finishPoolTurn(winnerSeat,reason);
+  endOverlay.classList.remove('hidden');
+  try{
+    let settlement=null;
+    if(!terminalTurnSaved){
+      const result=await savePoolTurn(true,winnerSeat,reason);
+      savedFinalChallengeId=String(result.player_challenge_id||SOLO_MATCH_ID);
+      savedFinalWinnerId=String(result.winner_id||'')||null;
+      terminalTurnSaved=true;
+      settlement=result.settlement||null;
+      if(result.pending_opponent){
+        $('endTitle').textContent='Result Waiting for Rival';
+        $('saveStatus').textContent='Your 8-ball result is saved. The match will settle when a rival accepts the challenge.';
+        retry.classList.add('hidden');
+        try{window.parent.postMessage({type:'oddzone:pool-turn-waiting',challengeId:SOLO_MATCH_ID,waitingForOpponent:true,matchDecided:true},'*');}catch(e){}
+        return;
+      }
+    }
+    if(!settlement){
+      const sb=getSB();
+      if(!sb)throw new Error('Supabase is unavailable. Check your connection and sign-in.');
+      const{data,error}=await sb.rpc('settle_duel',{
+        p_challenge_id:String(savedFinalChallengeId||SOLO_MATCH_ID),
+        p_score:winnerSeat===TURN_SEAT?1:0
+      });
+      if(error)throw error;
+      settlement=data;
+    }
+    if(!settlement||typeof settlement.matched!=='boolean'){
+      throw new Error('The server did not confirm the final pool result.');
+    }
+    if(settlement.matched){
+      const didWin=typeof settlement.won==='boolean'?settlement.won:localWinner;
+      const opponentId=String(settlement.opponent_id||'');
+      const winnerId=savedFinalWinnerId||(didWin?LIVE_USER_ID:opponentId)||null;
+      $('endTitle').textContent=didWin?'You Win!':'You Lose';
+      $('endTable').innerHTML='<tr><td>Winner</td><td>'+(didWin?'You':'Opponent')+'</td></tr><tr><td>Shots taken</td><td>'+String(shots)+'</td></tr>';
+      $('saveStatus').textContent=didWin?'The official result and stake payout are settled.':'The official result is settled.';
+      retry.classList.add('hidden');
+      retry.disabled=false;
+      try{window.parent.postMessage({
+        type:'oddzone:pool-match-complete',
+        challengeId:SOLO_MATCH_ID,
+        winnerSeat,
+        seat:TURN_SEAT,
+        winner:winnerId||(winnerSeat===0?'Player_One':'Player_Two'),
+        winnerId
+      },'*');}catch(e){}
+    }else{
+      $('endTitle').textContent='Result Saved';
+      $('saveStatus').textContent='Your result is saved, but the server has not confirmed the payout yet. Retry to check settlement.';
+      retry.classList.remove('hidden');
+      retry.disabled=false;
+      retry.textContent='Retry final result';
+    }
+  }catch(error){
+    console.error('[8-ball] final pool result could not be confirmed:',error);
+    $('endTitle').textContent='Result Pending';
+    $('saveStatus').textContent='The final result could not be confirmed'+(error&&error.message?': '+error.message:'')+'. Retry when you are back online.';
+    retry.classList.remove('hidden');
+    retry.disabled=false;
+    retry.textContent='Retry final result';
+    retry.onclick=()=>void finishPoolTurn(winnerSeat,reason);
+  }
+}
+
+/*
+ * Submit a solo/async rack result.
+ *
+ * settle_duel() is the server-side, locked settlement: it stores this
+ * player's win/loss result on their challenge and, if a rival has already posted one,
+ * decides the winner and moves the money in the same transaction. Called with
+ * no rival posted it simply parks the result while waiting.
+ *
+ * A displayed browser value is never trusted for money -- this is one more
+ * client write, but the settlement itself is server-side. If it cannot be
+ * reached, the result and table remain in pool_matches and this screen offers
+ * a retry without displaying an unconfirmed winner.
+ */
+async function settleSoloScore(myScore){
+  const sb = getSB();
+  if(!sb)throw new Error('Supabase is unavailable. Check your connection and sign-in.');
+  const { data, error } = await sb.rpc('settle_duel', {
+    p_challenge_id: String(SOLO_MATCH_ID),
+    p_score: Math.max(0, Math.floor(Number(myScore) || 0))
+  });
+  if(error)throw error;
+  return data;
+}
+
+let soloSubmissionInProgress=false;
+async function submitSoloFinalRun(finalScore,outcome){
+  if(soloSubmissionInProgress)return;
+  soloSubmissionInProgress=true;
+  const status=$('saveStatus');
+  const retryButton=$('btnRetrySettlement');
+  if(retryButton){retryButton.disabled=true;retryButton.textContent='Submitting…';}
+  try{
+    const uploaded=await publishSoloRack(outcome);
+    if(!uploaded)throw new Error('The final result and table could not be uploaded.');
+    if(status)status.textContent='Result uploaded. Waiting for server settlement…';
+    const result=await settleSoloScore(finalScore);
+    if(!result||typeof result.matched!=='boolean'){
+      throw new Error('The server returned an invalid settlement response.');
+    }
+
+    const banner=$('pendingBanner');
+    if(result.matched){
+      const tie=result.is_tie===true;
+      const won=result.won===true;
+      const title=tie?'Tie':won?'Won':'Lost';
+      $('endTitle').textContent=title;
+      if(status)status.textContent=tie
+        ? 'Tie — stakes were refunded.'
+        : won ? 'You won — payout confirmed by OddZone.' : 'You lost — the result is settled.';
+      if(banner){banner.textContent=status?status.textContent:'';banner.classList.add('show');}
+    }else{
+      $('endTitle').textContent='Result Saved';
+      if(status)status.textContent='Your rack result is recorded. OddZone will settle it when your rival finishes.';
+      if(banner){banner.textContent=status?status.textContent:'';banner.classList.add('show');}
+    }
+    if(retryButton)retryButton.classList.add('hidden');
+    const againButton=$('btnAgain');
+    if(againButton)againButton.disabled=false;
+    reportComplete(finalScore);
+  }catch(error){
+    console.error('[8-ball] final result upload or settle_duel failed:',error);
+    $('endTitle').textContent='Settlement Pending';
+    if(status)status.textContent='OddZone could not confirm your score and payout. Check your connection and sign-in, then retry.';
+    asyncRunBanner('Your result is not confirmed yet. Retry submission when you are back online.');
+    if(retryButton){
+      retryButton.classList.remove('hidden');
+      retryButton.disabled=false;
+      retryButton.textContent='Retry result submission';
+    }
+  }finally{
+    soloSubmissionInProgress=false;
+    if(retryButton&&retryButton.textContent==='Submitting…'){
+      retryButton.disabled=false;
+      retryButton.textContent='Retry result submission';
+    }
+    endOverlay.classList.remove('hidden');
+  }
+}
 
 /* ------------------------------------------------------------------ *
  * ASYNC "TAKE TURNS" ENGINE
  *
  * A match is one row in `pool_matches`. The whole table (every ball's
- * x/y/alive flag, groups, turn, score) is serialised to JSON, so a
+ * x/y/alive flag, groups, turn) is serialised to JSON, so a
  * player can close the tab and resume days later, on another device.
  * Postgres holds the durable state; Realtime gives the low-latency
  * "your opponent has moved" ping, and a 4s poll acts as the fallback
@@ -683,7 +1637,24 @@ window.__oddzone_forceEnd = () => { if(state!=='over') finishGame(0, 'Time ended
  * a Postgres RPC / Edge Function that checks the session user is one of
  * the two participants, and call only that.
  * ------------------------------------------------------------------ */
-const asyncState={matchId:null,channel:null,mySeat:0,ready:false,saving:false,pollTimer:null};
+/* ASYNC MATCH STATE — strictly remote, never hotseat.
+ *
+ * An async match is TWO COMPLETE, INDEPENDENT RUNS on two devices. Nothing is
+ * handed between devices mid-rack: no turn counter, no "your rival's turn",
+ * no table carried from one player's shot to the other's. The only thing that
+ * ever crosses the wire in async mode is a FINISHED run (score + shots + final
+ * table), and only after its owner's clock has stopped.
+ *
+ * `mySeat`/`pollTimer`/`pendingCheckpoint`/`seenRowTurn` belonged to the
+ * pass-and-play engine this replaced and are deliberately gone. */
+const asyncState={
+  matchId:null,          // the shared `code` (friendly "Take Turns" rooms only)
+  challengeId:null,      // the stake challenge this run belongs to
+  channel:null,ready:false,saving:false,
+  settled:false,         // the final rack has been handed to settle_duel()
+  timerReleased:false,   // the arena clock has been started by the first shot
+  hostLabel:null         // opponent/seat-0 label, preserved across writes
+};
 let asyncWinner=-1,asyncEndReason='';
 
 function asyncStatus(msg,kind){
@@ -697,14 +1668,39 @@ function asyncStatus(msg,kind){
 }
 const code6=()=>Math.random().toString(36).slice(2,8).toUpperCase();
 
+/* Table state -> plain JSON the backend can store.
+ *
+ * PER-TURN PAYLOAD. One entry per shot (the shot that caused a pocket).
+ * Every turn boundary in this game goes through endShot(), and endShot() is
+ * exactly one shot, so `balls` + this log ARE the full turn history without
+ * storing the same 16-position table once per turn.
+ *   balls      16 x [x, y, alive] — cue first, then 1..15
+ *   pocketed   ball numbers sunk
+ *   seat       the seat that just shot
+ *   turn       1-based turn counter at the time of the shot
+ *   score/shots  running totals at the time of the shot
+ */
+function shotCheckpoint(){
+  return {
+    turn:(SHOT_LOG.length|0)+1,
+    seat:cur|0,
+    shots:shots|0,
+    score:score|0,
+    pocketed:shotPocketed.slice(),
+    balls:balls.map(b=>[Math.round(b.x*10)/10,Math.round(b.y*10)/10,b.state==='active'?1:0])
+  };
+}
+
 /* Table state -> plain JSON the backend can store. */
-function snapshot(){
+function snapshot(log){
   return {
     balls:balls.map(b=>[Math.round(b.x*10)/10,Math.round(b.y*10)/10,b.state==='active'?1:0]),
     groups:[players[0].group,players[1].group],
-    cur,shots,score,best,hand:inHand,
+    cur,shots,score:0,hand:inHand,
     called:typeof called==='number'?called:null,
-    over:state==='over'&&asyncWinner>=0?[asyncWinner,asyncEndReason]:null
+    over:state==='over'&&asyncWinner>=0?[asyncWinner,asyncEndReason]:null,
+    // Turn history, oldest first. `log` is the row's existing tail.
+    turns:Array.isArray(log)?log:[]
   };
 }
 
@@ -718,168 +1714,913 @@ function applySnapshot(sn,mayAct){
   players[0].group=sn.groups?sn.groups[0]:null;
   players[1].group=sn.groups?sn.groups[1]:null;
   cur=sn.cur|0;shots=sn.shots|0;
-  if(typeof sn.score==='number')score=sn.score;
-  if(typeof sn.best==='number'&&sn.best>best)best=sn.best;
+  score=0;
   inHand=!!sn.hand;
   called=typeof sn.called==='number'?sn.called:null;
   strike=null;floats.length=0;shotPocketed=[];botPlace=null;botBusy=false;
   startOverlay.classList.add('hidden');endOverlay.classList.add('hidden');
-  if(sn.over){asyncWinner=sn.over[0];asyncEndReason=sn.over[1];state='over';}
+  if(sn.over){
+    // Adopting a finished rack: fill in what the end screen reads.
+    asyncWinner=sn.over[0]|0;asyncEndReason=sn.over[1]||'Finished';state='over';
+    if($('hudPocketed'))$('hudPocketed').textContent=String(15-balls.filter(b=>b.n&&b.state==='active').length);
+  }
   else state=inHand?(mayAct?'place':'wait'):(mayAct?'aim':'wait');
   setPowerUI(0);updateHud();syncAsyncHud();
 }
 
-/* "You" is always drawn in the column matching this device's seat. */
+/* Async HUD.
+ *
+ * There is no "your turn" / "their turn" in remote async play: this device is
+ * always a single player's own run, and the column on the left is always them.
+ * The rival is not a seat that is waiting for the cue. */
 function syncAsyncHud(){
-  if(mode!=='async')return;
-  const mine=asyncState.mySeat,theirs=1-mine;
-  players[0].name=mine===0?'You':'Rival';
-  players[1].name=theirs===1?'You':'Rival';
-  $('nm0').textContent=mine===0?'You':'Rival';
-  $('nm1').textContent=theirs===1?'You':'Rival';
-  $('av0').textContent=mine===0?'😎':'🐶';
-  $('av1').textContent=theirs===1?'😎':'🐶';
+  // A stake-backed run draws its own columns ("You" / the rival's real name)
+  // and must not be relabelled from here -- this used to hard-reset lane 1 to
+  // the placeholder "Rival" and throw away the opponent's name.
+  if(mode!=='async'||SOLO_BACKED){ if(mode==='async'&&SOLO_BACKED)soloLabelNames(); return; }
+  players[0].name='You';
+  players[1].name='Rival';
+  $('nm0').textContent='You';
+  $('nm1').textContent='Rival';
+  $('av0').textContent='😎';
+  $('av1').textContent='🐶';
   renderSlots();
-  const badge=$('asyncBadge'),my=cur===mine;
-  if(badge){badge.textContent=state==='over'?'Finished':my?'Your turn':'Waiting…';badge.classList.toggle('wait',!my);}
+  const badge=$('asyncBadge');
+  if(badge){
+    badge.textContent=state==='over'?'Run finished':'1-minute run';
+    badge.classList.remove('wait');
+  }
 }
 function savePendingBanner(w,reason){
   const b=$('pendingBanner');if(!b)return;
-  const youWon=w===asyncState.mySeat;
-  b.textContent=youWon
-    ? '🎉 You won this match. Your rival will see the result the next time they open the code — the table is already saved.'
-    : 'Match over — your rival took it ('+reason+'). The result is saved; open the code again to see the final table.';
+  b.textContent='Your rack is complete ('+reason+'). OddZone records the win/loss result.';
   b.classList.add('show');
 }
 
+/* Broadcast room for friendly "Take Turns" codes. It only announces that a
+ * run has been POSTED -- it never carries a move, so it cannot drive a turn. */
 function asyncChannel(){
   if(asyncState.channel)return asyncState.channel;
   const sb=getSB();if(!sb)return null;
   asyncState.channel=sb.channel(ASYNC_CHANNEL+':'+asyncState.matchId,{config:{broadcast:{self:false}}});
-  asyncState.channel.on('broadcast',{event:'state'},()=>{refreshAsyncMatch();});
   return asyncState.channel;
 }
+/* The deployed pool_matches schema is challenge_id / code / state / status /
+ * turn / score / shots — nothing else. Every write below sticks to it.
+ *
+ * TWO KEY COLUMNS, AND `code` IS NOT RELIABLE. Real rows on this project carry
+ * a NULL `code` (the column exists and is left empty) and lowercase statuses
+ * ('completed', not 'COMPLETED'). A lookup keyed only on `code` therefore
+ * matched nothing in production and a status test against 'COMPLETED' never
+ * fired. Both reads below try the challenge id first and fall back to the code. */
 async function loadAsyncRow(){
   const sb=getSB();if(!sb||!asyncState.matchId)return null;
-  const{data,error}=await sb.from(ASYNC_TABLE).select('*').eq('code',asyncState.matchId).maybeSingle();
-  if(error)throw error;
-  return data;
+  const id=asyncState.challengeId||asyncState.matchId;
+  let lastError=null;
+  for(const column of ['challenge_id','code']){
+    const{data,error}=await sb.from(ASYNC_TABLE).select('*').eq(column,id).maybeSingle();
+    if(error){lastError=error;continue;}
+    if(data)return data;
+  }
+  if(lastError)throw lastError;
+  return null;
 }
 
+/* Seat 0 = whoever created the rack and breaks. They own `state.seats[0]`;
+ * the guest claims `state.seats[1]` on arrival and is the only other seat. */
 async function createAsyncMatch(){
   const sb=getSB();if(!sb)throw new Error('Backend unavailable.');
   asyncStatus('Creating match…');
   const code=code6();
+  const challengeId=CHALLENGE_ID||code;
+  const first=snapshot([]);
+  // Seat 0's label is the host's display name when the arena passed one: the
+  // matchmaker uses it to keep a player from being auto-matched into their own
+  // room, and the guest sees a real name instead of "Host".
+  const hostLabel=(LIVE_PARAMS.get('userName')||'').trim()||'Host';
+  first.seats={0:hostLabel,1:null};
   const{error}=await sb.from(ASYNC_TABLE).insert({
+    challenge_id:challengeId,
     code,
-    host_name:'Host',
-    challenger_name:null,
-    state:snapshot(),
+    state:first,
+    score:0,
+    shots:0,
     status:'WAITING',
-    turn:0,
-    host_score:0,
-    challenger_score:0,
-    updated_at:new Date().toISOString()
+    turn:0
   });
   if(error)throw error;
-  asyncState.matchId=code;asyncState.mySeat=0;asyncState.ready=true;
+  asyncState.matchId=code;asyncState.challengeId=challengeId;
+  asyncState.ready=true;asyncState.settled=false;
+  asyncState.hostLabel=hostLabel;
   asyncChannel();mode='async';setNames();
-  applySnapshot(snapshot(),true);
+  applySnapshot(first,true);
   asyncStatus('__CODE__'+code,'ok');
-  startAsyncPoll();
   return code;
 }
 
+/* Claim seat 1 and adopt the table the host left for us, exactly as it was. */
 async function joinAsyncMatch(code){
   const sb=getSB();if(!sb)throw new Error('Backend unavailable.');
   const clean=(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
   if(!clean)throw new Error('Enter the match code you were given.');
   asyncStatus('Joining…');
-  const{data,error}=await sb.from(ASYNC_TABLE).select('*').eq('code',clean).maybeSingle();
+  let data=null,error=null;
+  for(const column of ['challenge_id','code']){
+    const res=await sb.from(ASYNC_TABLE).select('*').eq(column,clean).maybeSingle();
+    if(res.error){error=res.error;continue;}
+    if(res.data){data=res.data;error=null;break;}
+  }
   if(error)throw error;
   if(!data)throw new Error('No match found for that code.');
-  if(data.status==='COMPLETED')throw new Error('That match is already finished.');
-  if(data.challenger_name)throw new Error('That match already has an opponent.');
+  if(String(data.status||'').toUpperCase()==='COMPLETED')throw new Error('That match is already finished.');
+  // A seat string is only a NAME; the claim is whoever actually plays from it.
+  // A host's default row already says {0:'Host',1:'Challenger'}, so refusing
+  // on the label alone locked every guest out of every match.
+  const seats=(data.state&&data.state.seats)||{};
+  if(seats[1]&&seats[1]!=='Challenger')throw new Error('That match already has an opponent.');
+  const nextState=Object.assign({},data.state||{},{
+    seats:Object.assign({},seats,{0:seats[0]||'Host',1:'Challenger'})
+  });
   const{error:upErr}=await sb.from(ASYNC_TABLE)
-    .update({challenger_name:'Challenger',status:'ACTIVE',updated_at:new Date().toISOString()})
-    .eq('code',clean).is('challenger_name',null);
+    .update({state:nextState,status:'ACTIVE'})
+    .eq('code',clean);
   if(upErr)throw upErr;
-  asyncState.matchId=clean;asyncState.mySeat=1;asyncState.ready=true;
+  asyncState.matchId=clean;asyncState.challengeId=data.challenge_id||clean;
+  asyncState.ready=true;asyncState.settled=false;
+  asyncState.hostLabel=(seats[0]||'Host');
   asyncChannel();mode='async';setNames();
-  const mayAct=(data.turn|0)===1;
-  applySnapshot(data.state,mayAct);
-  asyncStatus(mayAct?'Joined — it is your break.':'Joined — waiting for your rival to break.',mayAct?'ok':'');
-  startAsyncPoll();
+  // A joiner always plays their OWN full run on the host's saved table; the
+  // host is never "about to shoot" on this device.
+  applySnapshot(nextState,true);
+  cur=0;state=inHand?'place':'aim';
+  setPowerUI(0);updateHud();syncAsyncHud();
+  asyncStatus('Joined — you have your own one-minute run on this table.','ok');
   return clean;
 }
 
-async function refreshAsyncMatch(){
-  if(!asyncState.ready||asyncState.saving)return;
-  try{
-    const row=await loadAsyncRow();
-    if(!row)return;
-    asyncState.lastSeen=row.updated_at;
-    const rowTurn=row.turn|0;
-    if(row.status==='COMPLETED'||(row.state&&row.state.over)){
-      if(state!=='over'){
-        applySnapshot(row.state,false);
-        if(row.state&&row.state.over)finishGame(row.state.over[0],row.state.over[1],true);
-        stopAsyncPoll();asyncStatus('Match completed.','ok');
-      }
-      return;
-    }
-    // Only adopt the row when the opponent has actually taken their shot.
-    const opponentMoved=(rowTurn!==asyncState.mySeat)&&(cur===asyncState.mySeat||state==='wait');
-    if(opponentMoved){
-      const wasMyTurn=state==='wait';
-      applySnapshot(row.state,rowTurn===asyncState.mySeat);
-      if(wasMyTurn&&state==='aim')toast('Your turn — aim and shoot',2000);
-    }
-  }catch(e){/* offline: the poll retries */}
-}
+/* ================================================================== *
+ * NO TURN HAND-OFF.
+ *
+ * An async match is two complete, independent runs, so nothing in async mode
+ * may ever read the match row WHILE A PLAYER IS RUNNING. The poll and the
+ * post-shot write that used to live here did exactly that: every shot rewrote
+ * the shared row's table and flipped `turn`, and the next poll re-applied the
+ * row to the LIVE board (see applySnapshot) -- which is what made two remote
+ * devices behave like one hotseat table, and what could show "it is your
+ * rival's turn" in the middle of your own run.
+ *
+ * The only async write is submitRun(), called once from finishGame() after the
+ * clock has stopped or the rack is over. */
 
-/* Persist our post-shot table and hand the turn over. */
-async function postAsyncState(){
-  if(mode!=='async'||!asyncState.ready||asyncState.saving)return;
-  const sb=getSB();if(!sb)return;
+/* Publish THIS player's finished run and flag it complete. */
+async function submitRun(outcome){
+  if(asyncState.saving)return false;
   asyncState.saving=true;
   try{
-    await sb.from(ASYNC_TABLE).update({
-      state:snapshot(),turn:cur,
-      host_score:asyncState.mySeat===0?score:0,
-      challenger_score:asyncState.mySeat===1?score:0,
-      status:state==='over'?'COMPLETED':'ACTIVE',
-      winner:state==='over'?asyncWinner:null,
-      updated_at:new Date().toISOString()
-    }).eq('code',asyncState.matchId);
+    if(!asyncState.ready)throw new Error('The async match is not ready to submit.');
+    const sb=getSB();if(!sb)throw new Error('Supabase is unavailable. Check your connection and sign-in.');
+    if(!asyncState.hostLabel){
+      // Keep the rival's label so the two runs can be told apart on the row.
+      const row=await loadAsyncRow().catch(()=>null);
+      const seats0=row&&row.state&&row.state.seats;
+      asyncState.hostLabel=(seats0&&seats0[0])||'Rival';
+    }
+    const run=asyncRunPayload(outcome);
+    run.seats=Object.assign({0:asyncState.hostLabel||'Rival',1:null},run.seats||{});
+    // `turn`/`score`/`shots` stay AT THIS RUN'S VALUES: they are this seat's
+    // submitted result, not an instruction for the other device to play.
+    const{data,error}=await sb.from(ASYNC_TABLE).update({
+      state:run,
+      turn:0,
+      score:Math.max(0,Math.floor(Number(run.score)||0)),
+      shots:Math.max(0,Math.floor(Number(run.shots)||0)),
+      status:'COMPLETED'
+    }).eq('challenge_id',asyncState.challengeId||asyncState.matchId)
+      .select('challenge_id')
+      .maybeSingle();
+    if(error)throw error;
+    if(!data)throw new Error('No pool_matches row exists for this run.');
+    if(!asyncState.settled){
+      await settleAsyncDuel(run.score);
+      asyncState.settled=true;
+    }
     const ch=asyncChannel();
-    if(ch)await ch.send({type:'broadcast',event:'state',payload:{by:asyncState.mySeat}});
-  }catch(e){console.warn('[8-ball] async save failed:',e);}
+    // Announce only that a run was posted, never a move to replay.
+    if(ch){
+      try{
+        const broadcast=await ch.send({type:'broadcast',event:'run-posted',payload:{seat:run.seat}});
+        if(broadcast&&broadcast.error)console.warn('[8-ball] async run broadcast failed:',broadcast.error);
+      }catch(error){console.warn('[8-ball] async run broadcast failed:',error);}
+    }
+    const retryButton=$('btnRetrySettlement');
+    const againButton=$('btnAgain');
+    if(againButton)againButton.disabled=false;
+    if(retryButton)retryButton.classList.add('hidden');
+    reportComplete(run.score);
+    endOverlay.classList.remove('hidden');
+    return true;
+  }catch(e){
+    console.error('[8-ball] async run upload or settlement failed:',e);
+    $('endTitle').textContent='Settlement Pending';
+    const status=$('saveStatus');
+    if(status)status.textContent='OddZone could not confirm your score. Check your connection and sign-in, then retry.';
+    asyncRunBanner('Your result is not confirmed yet. Retry score submission when you are back online.');
+    const retryButton=$('btnRetrySettlement');
+    if(retryButton){
+      retryButton.classList.remove('hidden');
+      retryButton.disabled=false;
+      retryButton.textContent='Retry score submission';
+    }
+    endOverlay.classList.remove('hidden');
+    return false;
+  }
   finally{asyncState.saving=false;}
 }
-function startAsyncPoll(){stopAsyncPoll();asyncState.pollTimer=setInterval(refreshAsyncMatch,4000);}
-function stopAsyncPoll(){if(asyncState.pollTimer)clearInterval(asyncState.pollTimer);asyncState.pollTimer=null;}
+
+/* ================================================================== *
+ * AUTOMATIC SETTLEMENT
+ *
+ * The last ball was potted: the rack is over on BOTH devices (the row is
+ * COMPLETED), so the final scores can be compared once. settle_duel() is the
+ * only thing that moves money — it stores this seat's score, compares it with
+ * the opponent's, declares the winner and credits the stake payout. It is
+ * idempotent: a second call from the other device is a no-op, and a casual
+ * rack opened without a stake challenge has nothing to settle.
+ * ================================================================== */
+async function settleAsyncDuel(myScore){
+  const status=$('saveStatus');
+  const sb=getSB();
+  const challengeId=asyncState.challengeId||CHALLENGE_ID;
+  // A rack created from the Take Turns panel is a friendly match, not a wager.
+  // settle_duel() on an id that is not a stake challenge would just error, so
+  // only the arena's stake flow (asyncMatchId/challenge_id) settles.
+  if(!SOLO_BACKED&&!CHALLENGE_ID){
+    if(status)status.textContent=YOUWON_ASYNC_TEXT();
+    return {matched:false};
+  }
+  if(!sb)throw new Error('Supabase is unavailable. Check your connection and sign-in.');
+  if(status)status.textContent='Rack complete — submitting your result…';
+  try{
+    // FINAL SERVER SETTLEMENT. This one RPC stores this player's finished run
+    // on their own challenge row and, if the rival's run is already stored,
+    // compares the two INSIDE the database: declares the winner and credits the
+    // payout in the same locked transaction. The client never decides a winner
+    // and never moves money -- two independent devices cannot settle each other
+    // by accident, and a retry from either side is idempotent.
+    const{data,error}=await sb.rpc('settle_duel',{
+      p_challenge_id:String(challengeId),
+      p_score:Math.max(0,Math.floor(Number(myScore)||0))
+    });
+    if(error)throw error;
+    if(!data||typeof data.matched!=='boolean'){
+      throw new Error('The server returned an invalid settlement response.');
+    }
+    const payload=$('pendingBanner');
+    if(data&&data.matched){
+      const tie=data.is_tie===true;
+      const iWon=data.won===true;
+      $('endTitle').textContent=tie?'Tie':iWon?'Won':'Lost';
+      if(status)status.textContent=tie?'Tie — stakes refunded.':iWon?'🏆 You win — payout credited to your wallet.':'Rival took it — stake settled.';
+      if(payload){payload.textContent=status?status.textContent:'';payload.classList.add('show');}
+    }else if(status){
+      $('endTitle').textContent='Result Saved';
+      status.textContent='Your rack result is submitted. OddZone settles the stake when your rival finishes.';
+    }
+    return data;
+  }catch(e){
+    console.error('[8-ball] settle_duel (async) failed:',e);
+    throw e;
+  }
+}
+function YOUWON_ASYNC_TEXT(){return 'Your run is saved and submitted.';}
+// Kept as no-ops so the friendly "Take Turns" code paths that still call them
+// cannot start a hidden poll that would re-apply the row mid-run.
+function startAsyncPoll(){}
+function stopAsyncPoll(){}
 
 /* OddZone arena bridge — the parent page owns the match timer. */
-window.__oddzoneReadScore=()=>Number(score)||0;
+window.__oddzoneReadScore=()=>0;
+window.__oddzoneTurnBased=()=>TURN_BASED;
+window.__oddzonePoolOwnsResult=()=>TURN_BASED||SOLO_BACKED||mode==='online';
+/* What kind of run this frame is playing, and whether its clock is running.
+ * The arena reads this to hold ITS clock until the player's first shot
+ * instead of starting a countdown the moment the iframe opens. */
+window.__oddzoneRunInfo=()=>({
+  timed:isTimedRun(),
+  started:!!firstShotFired,
+  seconds:TURN_SECONDS,
+  // Read the shared value the countdown publishes, so the arena and the table
+  // HUD can never disagree.
+  remaining:asyncTurnTimerActive
+    ? (window.__oddzoneRunRemaining!=null?window.__oddzoneRunRemaining:asyncTurnTimer)
+    : null
+});
+/* Diagnostic snapshot. */
+window.__qA=()=>{
+  return {mode,state,cur,ready:asyncState.ready,saving:asyncState.saving,settled:asyncState.settled,inHand,myTurn:myTurn(),shots,score,soloBacked:SOLO_BACKED,accepter:SOLO_ACCEPTER,timer:asyncTurnTimer,timerActive:asyncTurnTimerActive,firstShot:firstShotFired,ballsActive:balls.filter(b=>b.state==='active').length};
+};
+window.__qaRules=()=>({groups:[players[0].group,players[1].group],leftS:left('s'),leftT:left('t'),eightPhase:eightPhase(),called,eightPocket,firstHit,cur});
 window.__oddzoneStart=()=>{
-  if(mode==='async'&&asyncState.ready){applySnapshot(snapshot(),cur===asyncState.mySeat);return;}
+  // Reaching the table mid-run must never re-apply a stored row over the live
+  // board; only an untapped or finished LOCAL rack gets re-racked.
+  if(mode==='async'&&asyncState.ready&&state!=='menu'&&state!=='over')return;
   if(state==='menu'||state==='over')newGame();
 };
 window.__oddzoneEnd=()=>{
   window.__oddzoneEnded=true;
   const stop=e=>{e.preventDefault();e.stopImmediatePropagation();};
   ['keydown','pointerdown','touchstart'].forEach(t=>document.addEventListener(t,stop,true));
-  if(mode==='async'&&asyncState.ready)postAsyncState();
+  if(TURN_BASED&&asyncState.ready&&state!=='over'){
+    if(state==='striking'||state==='moving'||state==='settling')turnExpiryPending=true;
+    else void endPoolTurn('Time ended');
+    return;
+  }
+  // Timer expiry mid-run: the run is finalised (finishGame publishes the
+  // completed score + table). The turn is never "passed" to another seat.
+  if(mode==='async'&&asyncState.ready&&state!=='over'){
+    finishGame(0,'Time up');
+  }
 };
 window.__oddzoneSetMuted=(m)=>{setMuted(!!m);};
 
 /* MODES */
-let mode='bot',net=null,myRole=null,botBusy=false;
-const myTurn=()=>state==='aim'&&(mode==='async'?cur===asyncState.mySeat:mode==='online'?cur===myRole:mode==='bot'?cur===0:true);
-function setNames(){const bot=mode==='bot';
+
+// Stake-and-play-solo has no rival in the other seat: whoever's turn the
+// table says it is, it is yours. Without this branch the accepter (mode
+// 'online', seat 1) could never shoot from the challenger's seat 0.
+// Async is always this player's own run, so the cue is theirs whenever the
+// board is live -- there is no rival seat to hand the turn to.
+const myTurn=()=>state==='aim'&&(TURN_BASED?cur===TURN_SEAT:SOLO_BACKED?true:mode==='async'?true:mode==='online'?cur===LIVE.seat:true);
+function setNames(){const solo=mode==='solo';
+  // A score-backed rack has its own seat/name convention (see
+  // soloLabelNames). mode stays 'solo' here so the engine plays the table as
+  // you would in practice, but the header must not say "CPU".
+  if(TURN_BASED){turnBasedNames();return;}
+  if(SOLO_BACKED){soloLabelNames();return;}
   if(mode==='async'){syncAsyncHud();return;}
-  players[0].name=bot||myRole===0?'You':'Opponent';players[1].name=bot?'Computer':myRole===1?'You':'Opponent';$('nm0').textContent=players[0].name;$('nm1').textContent=bot?'CPU':players[1].name==='You'?'You':'Opp';$('av1').textContent=bot?'🤖':'🐶';}
+  players[0].name=solo||myRole===0?'You':'Opponent';players[1].name=solo?'You':myRole===1?'You':'Opponent';$('nm0').textContent=players[0].name;$('nm1').textContent=players[1].name==='You'?'You':'Opp';$('av1').textContent=solo?'😎':'🐶';}
+
+/* ================================================================== *
+ * LIVE DUEL BOOT
+ *
+ * The arena can open this file as
+ *   ../../8-ball-pool.html?matchId=<id>&seat=<0|1>&userId=<id>
+ * When matchId is present the module is in a real 2-player match, so the
+ * computer opponent must never run. Without the parameter the file behaves
+ * exactly as before: practice against the computer, plus the async mode.
+ * ================================================================== */
+const LIVE_PARAMS = new URLSearchParams(location.search);
+const LIVE_MATCH_ID = (LIVE_PARAMS.get('matchId') || '').trim();
+const LIVE_SEAT_RAW = LIVE_PARAMS.get('seat');
+const LIVE_USER_ID = (LIVE_PARAMS.get('userId') || '').trim();
+const isLiveMatch = !!LIVE_MATCH_ID;
+
+/* ================================================================== *
+ * ASYNC / STAKE-AND-PLAY-SOLO
+ *
+ * The arena opens this file at the end of a stake search:
+ *   ?matchId=<challenge>&asyncMatchId=<challenge>&seat=0&userId=…
+ *   &bankedScore=<legacy value>&opponentName=…&scoreWaiting=<0|1>&idleWaiting=<s>
+ *
+ * These parameters mean the opposite of a live duel: nobody is in the other
+ * seat. The player plays NOW, alone -- there is no "Waiting for Opponent"
+ * screen. Their strict 1-minute run starts on their first shot, never on load,
+ * and the finished run is banked for whoever accepts the challenge next.
+ *
+ * At the end of the rack its win/loss result is submitted (see finishGame).
+ * ================================================================== */
+const SOLO_MATCH_ID = (LIVE_PARAMS.get('asyncMatchId') || '').trim();
+const TURN_BASED = LIVE_PARAMS.get('turnBased') === '1' && !!SOLO_MATCH_ID;
+const TURN_SEAT = LIVE_PARAMS.get('turnSeat') === '1' ? 1 : 0;
+// ASYNC RUN, decided by the async id ALONE.
+//
+// This used to also require matchId === asyncMatchId. The arena passes the
+// rival's own matchId with the challenger's asyncMatchId, so the two differ
+// for Player B -- B was then classified as a LIVE DUEL, boots through the
+// presence engine and renders the hotseat two-seat layout ("Adaeze" on the
+// left, "You" on the right), which is exactly the pass-and-play shape this
+// must never have. One async id is enough: it means a private run.
+const SOLO_BACKED = !!SOLO_MATCH_ID;
+// Seat 1 in a SOLO_BACKED game is the player who ACCEPTED an already-played
+// rack and continues from its saved table.
+// Player B, accepting Player A's finished run. Either the arena says so
+// explicitly (`event=rival`), or this device was opened on seat 1 of an async
+// challenge -- both mean "play my own run against a stored one".
+const SOLO_ACCEPTER = SOLO_BACKED && (LIVE_SEAT_RAW === '1' || LIVE_PARAMS.get('event') === 'rival');
+// A live room is a real 2-player duel only when it is NOT score-backed.
+const isLiveMatchRoom = isLiveMatch && !SOLO_ACCEPTER;
+// The opponent already posted a score: there is nobody left to wait for.
+const SOLO_SCORE_WAITING = (LIVE_PARAMS.get('scoreWaiting') || '') === '1';
+const SOLO_IDLE_SECONDS = Math.max(0, Number(LIVE_PARAMS.get('idleWaiting')) || 0);
+const SOLO_OPP_NAME = (LIVE_PARAMS.get('opponentName') || '').trim();
+// Set once the async run has booted: this device is playing an async turn, so
+// its result is uploaded rather than compared on the same screen.
+let SOLO_MODE = false;
+// Live duels only: flips true once presence confirms the opponent is in the
+// room. Async runs never use it -- there is nobody to wait for.
+let matchStarted = false;
+
+function waitOverlayShow(title, sub){
+  const o = $('waitOverlay');
+  if (!o) return;
+  $('waitTitle').textContent = title || 'Waiting for Opponent…';
+  $('waitSub').textContent = sub || 'Connecting to the match room.';
+  o.classList.remove('hidden');
+}
+function waitOverlayHide(){ const o = $('waitOverlay'); if (o) o.classList.add('hidden'); }
+
+/* The cue is only live on your own turn; while waiting it must not react. */
+function liveSetCueEnabled(enabled){
+  const panel = $('cuePanel');
+  if (panel) panel.classList.toggle('cueLocked', !enabled);
+  if (!enabled) { input.down = false; input.power = 0; setPowerUI(0); }
+}
+
+async function bootLiveDuel(){
+  if (!isLiveMatch) return;
+  // Stake-and-play-solo: someone must not be parked in a waiting room when
+  // there is nobody to wait for. Handled before any presence work.
+  if (SOLO_BACKED) { await startSoloBackedAsyncMatch(); return; }
+
+  // 1. No computer opponent in a live match.
+  mode = 'online';
+  botBusy = false;
+  stopAsyncPoll();
+  const startBtn = $('btnStart');
+  if (startBtn) { startBtn.disabled = true; startBtn.textContent = 'Live match in progress'; }
+  waitOverlayShow('Connecting…', 'Joining the match room.');
+
+  const seat = LIVE_SEAT_RAW === '1' ? 1 : 0;
+  myRole = seat;
+
+  try {
+    // 2. seat 0 (host) breaks; liveJoin re-racks locally for the host.
+    // The adapter is optional -- a missing one must not block the rack.
+    if (typeof window.__oddzoneLiveJoin === 'function') {
+      await window.__oddzoneLiveJoin(LIVE_MATCH_ID, seat, { reset: true, userId: LIVE_USER_ID });
+    }
+  } catch (e) {
+    waitOverlayShow('Could not join the match', String((e && e.message) || e));
+    return;
+  }
+
+  // 3. NEVER TRAP THE PLAYER ON A WAITING SCREEN.
+  //
+  // This used to hold a "Waiting for Opponent…" overlay with a dead cue until
+  // presence confirmed a rival, with an 8-second fallback in between. Nobody
+  // asked to sit on that card: the rack is a solo score run whether or not a
+  // rival turns up, so the table is live from the first frame. A rival joining
+  // only makes it a simultaneous duel; their absence costs the player nothing.
+  matchStarted = true;
+  waitOverlayHide();
+  liveSetCueEnabled(true);
+  if (state !== 'aim') { newGame(); state = 'aim'; }
+  // The arena keeps its own clock HELD until oddzone:first-shot, so joining
+  // and loading never burn the one minute.
+
+  // A rival arrived. The rack is already live, so nothing here starts play --
+  // it only tells the arena that this is now a real two-seat room.
+  const beginWhenReady = () => {
+    if (!LIVE.rivalPresent || state === 'over') return;
+    waitOverlayHide();
+    liveSetCueEnabled(true);
+    liveSyncHud();
+    toast('Your rival is in the room — one minute each, highest score wins', 3200);
+    try { window.parent.postMessage({ type: 'oddzone:match-ready', matchId: LIVE_MATCH_ID, seat }, '*'); } catch (e) {}
+  };
+
+  // The rack is already live, so only a rival's ARRIVAL still matters here.
+  // This poll is what promoted a rival who joined before we subscribed; it
+  // stops as soon as they are seen and never gates play in the meantime.
+  const poll = setInterval(() => {
+    if (LIVE.rivalPresent) { clearInterval(poll); beginWhenReady(); }
+  }, 200);
+
+  // React the moment presence or the turn changes.
+  livePresenceListener = () => { if (LIVE.rivalPresent) beginWhenReady(); };
+
+  setNames();
+  liveSyncHud();
+  toast(SOLO_ACCEPTER || seat === 0
+    ? 'Play your one-minute rack — your result is saved for the next challenger'
+    : 'You are at the table — play your run', 3000);
+  // The arena holds its clock until the first shot; this only makes sure a
+  // stale "held" state cannot outlive the overlay.
+  try { window.parent.postMessage({ type: 'oddzone:match-waiting', matchId: LIVE_MATCH_ID, seat }, '*'); } catch (e) {}
+}
+
+/* ================================================================== *
+ * STAKE-AND-PLAY-SOLO BOOT  (arena passed asyncMatchId)
+ *
+ * Seat 0 / fresh score: the player is the challenger. The table starts
+ *   immediately at full 1-minute time; nothing waits on the network.
+ * Seat 1 / rival's score already posted: this player ACCEPTED that score
+ *   and is playing 1v1 against it, so the game keeps the challenger's rack
+ *   where it was and keeps score from zero on this device.
+ * Seat 1 / rival has not played (idle): two players claimed the same open
+ *   match by accident and joined each other's row. Rather than mirroring an
+ *   untimed rack, fall back to a normal live duel for those seats.
+ * ================================================================== */
+/*
+ * Legacy independent-score runs use the base pool_matches columns only.
+ * Turn-based stake duels use the participant/turn/replay columns added by
+ * 20261022000000_pool_turn_based_duels.sql.
+ *
+ *   challenge_id  text NOT NULL, UNIQUE   <- the key, NOT `code`
+ *   code          text
+ *   state         jsonb
+ *   status        text
+ *   turn          integer
+ *   score         integer
+ *   shots         integer
+ *   created_at    timestamptz
+ *
+ * The old async-engine row (host_name / challenger_name / host_score /
+ * challenger_score / winner / updated_at) does not exist here, and writing any
+ * of those columns makes PostgREST reject the whole row with 400. Independent
+ * score runs therefore store their replay payload inside `state`; turn-based
+ * saves use save_pool_turn() and also populate the dedicated turn columns.
+ */
+async function writePoolMatch(challengeId, run, status){
+  const sb = getSB();
+  if(!sb){
+    console.warn('[8-ball] pool_matches upload failed: Supabase client unavailable');
+    return false;
+  }
+  const row = {
+    challenge_id: String(challengeId),
+    code: String(challengeId),
+    state: run,                       // { balls, groups, score, shots, shotLog, … }
+    score: Math.max(0, Math.floor(Number(run && run.score) || 0)),
+    shots: Math.max(0, Math.floor(Number(run && run.shots) || 0)),
+    // Stored LOWERCASE: that is the casing the existing pool_matches rows use
+    // ('completed'), so a status filter / lookup is consistent across old and
+    // new rows. Reads normalise with String(status).toUpperCase().
+    status: String(status || 'completed').toLowerCase(),
+    turn: 1
+  };
+  // Insert a fresh run; update only on a duplicate challenge id.
+  try{
+    const { error } = await sb.from('pool_matches').insert(row);
+    if(!error) return true;
+    if(!/23505|duplicate key/i.test(String(error.message || error.code || ''))){
+      console.warn('[8-ball] pool_matches insert failed:', error);
+      return false;
+    }
+  }catch(e){
+    console.warn('[8-ball] pool_matches insert failed:', e);
+    return false;
+  }
+  try{
+    const { data, error } = await sb.from('pool_matches')
+      .update({ state: row.state, score: row.score, shots: row.shots, status: row.status, turn: row.turn })
+      .eq('challenge_id', row.challenge_id)
+      .select('challenge_id')
+      .maybeSingle();
+    if(error) throw error;
+    if(!data)throw new Error('No pool_matches row exists for challenge '+row.challenge_id);
+    return true;
+  }catch(e){
+    console.warn('[8-ball] pool_matches update failed:', e);
+    return false;
+  }
+}
+
+async function readPoolMatch(challengeId){
+  const sb = getSB();
+  if(!sb) return null;
+  const id = String(challengeId);
+  try{
+    // Key on the challenge id, then fall back to `code` for older rows (real
+    // rows on this project often have an empty `code`).
+    for(const column of ['challenge_id','code']){
+      const { data, error } = await sb.from('pool_matches')
+        .select('challenge_id,state,status,score,shots')
+        .eq(column, id).maybeSingle();
+      if(error) throw error;
+      if(data) return data;
+    }
+    return null;
+  }catch(e){ console.warn('[8-ball] pool_matches read failed:', e); return null; }
+}
+
+/*
+ * ASYNC RUN PAYLOAD
+ *
+ * Each player's turn is a COMPLETE, INDEPENDENT run on their own device.
+ * Nothing about one player's shot is replayed by the other, so the payload is
+ * data, not a hotseat hand-off:
+ *
+ *   state      final table: every ball's x/y/alive flag, groups, call, over
+ *   score      final score, banked
+ *   shots      total shots taken
+ *   shotLog    the full shot sequence (angle/power/spin), so a disputed score
+ *              can be re-simulated server-side later
+ *
+ * The challenger stores this against their duel row; the challenger's row is
+ * what settle_duel() compares against when the rival posts theirs.
+ */
+const SHOT_LOG = [];
+
+/* Player A's run is FINISHED here: `locked` marks it as a complete submission
+ * even when the rack did not end in a win/loss (the 1-minute clock simply ran
+ * out, so `over` is null). The rival's loader keys on this flag. */
+function asyncRunPayload(outcome){
+  const finished = !!outcome || state === 'over';
+  const finalScore = outcome && Number.isFinite(Number(outcome.score))
+    ? Math.max(0, Math.floor(Number(outcome.score)))
+    : Math.max(0, Math.floor(Number(score) || 0));
+  const over = outcome
+    ? [outcome.winner, outcome.reason]
+    : (state === 'over' && asyncWinner >= 0 ? [asyncWinner, asyncEndReason] : null);
+  return {
+    balls: balls.map(b => [Math.round(b.x*10)/10, Math.round(b.y*10)/10, b.state==='active'?1:0]),
+    groups: [players[0].group, players[1].group],
+    cur, shots, score: finalScore,
+    called: typeof called === 'number' ? called : null,
+    over,
+    shotLog: SHOT_LOG.slice(),
+    seat: SOLO_ACCEPTER ? 1 : 0,
+    // The 1-minute run clock travels with the run: how long this player was
+    // given and how much of it they actually used. A rival loading this state
+    // sees a real, played rack rather than an open table of unknown origin.
+    seconds: TURN_SECONDS,
+    secondsUsed: Math.min(TURN_SECONDS, Math.max(0, (firstShotFired ? TURN_SECONDS - asyncTurnTimer : 0))),
+    // Lock marker: written once the run has ended, by the clock or by the last
+    // ball. A run with locked:true cannot move again; a rival only reads it.
+    locked: finished
+  };
+}
+
+/* Publish this player's finished rack result (shots + table + shot log).
+   Only a challenger's row is left discoverable for a new rival. */
+function publishSoloRack(outcome){
+  if(!SOLO_BACKED) return null;
+  // The finished rack carries its win/loss result, shots, final table and
+  // the shot log all travel inside `state`, flagged `locked: true`. The row is
+  // marked COMPLETED so Player A's submission is unambiguous -- and the seat
+  // map still shows seats[1] empty, which is what makes the challenge open to
+  // Player B rather than a two-seat hotseat room.
+  // The accepting player's completed run is stored without reopening the room.
+  return writePoolMatch(SOLO_MATCH_ID, asyncRunPayload(outcome), SOLO_ACCEPTER?'settled':'COMPLETED');
+}
+
+/* One-time card at the end of an async run explaining what happens next. */
+function asyncRunBanner(text){
+  const b = $('pendingBanner');
+  if(!b) return;
+  b.textContent = text;
+  b.classList.add('show');
+}
+
+/* The arena's clock asks the module to stop (oddzone:end). Without this the
+ * run never finalises, so its result is never uploaded. Defined here,
+ * right after finishGame(), rather than further down where it used to live: it
+ * has to be installed by the time the frame loop starts. */
+window.__oddzone_forceEnd = () => {
+  if(state==='over')return;
+  if(TURN_BASED){
+    if(state==='striking'||state==='moving'||state==='settling')turnExpiryPending=true;
+    else void endPoolTurn('Time ended');
+    return;
+  }
+  finishGame(0,'Time ended');
+};
+
+/* ================================================================== *
+ * REMOTE RIVAL LOAD  (Device B)
+ *
+ * Player A's finished rack (result + shots + final ball positions) is stored on
+ * the challenge in Supabase. Player B's device loads that run and starts on
+ * THE EXACT TABLE A LEFT, but every other thing on this screen -- the active
+ * turn controls, the shot count, the groups and the 1-minute clock
+ * -- belongs to B and starts from zero.
+ *
+ * This is the ONLY thing that crosses devices. There is no turn, no cursor, no
+ * "your rival is playing": A has finished and is gone, so B plays uninterrupted
+ * and the two rack results are compared afterwards.
+ * ================================================================== */
+function adoptRivalTable(run){
+  if(!run || !Array.isArray(run.balls) || run.balls.length !== balls.length) return false;
+  run.balls.forEach((a,i)=>{
+    const b=balls[i];if(!b||!Array.isArray(a))return;
+    if(a[2])resetBall(b,Number(a[0])||0,Number(a[1])||0);
+    else{b.state='pocketed';b.vx=b.vy=0;b.pocket=null;b.sinkT=0;}
+  });
+  // If the rival left the cue off the table (a scratch ending the run), put it
+  // back on the spot so this player can actually take their first shot.
+  if(balls[0].state!=='active')placeCue();
+  // ---- Player B's OWN run, from zero ----
+  score=0;shots=0;shotPocketed=[];SHOT_LOG.length=0;
+  players.forEach(p=>p.group=null);cur=0;firstHit=null;called=null;inHand=false;
+  strike=null;settleTimer=0;moveTime=0;eightPocket=-1;wrongRing=null;
+  finalizeReported=false;asyncWinner=-1;asyncEndReason='';
+  asyncState.settled=false;asyncState.saving=false;
+  // The clock is armed but NOT running: it starts on B's first shot.
+  stopTurnTimer();firstShotFired=false;asyncTurnTimer=TURN_SECONDS;
+  const box=$('turnTimerBox');if(box)box.style.display='none';
+  // Active turn controls are B's from the first frame.
+  state='aim';setPowerUI(0);updateHud();renderSlots();liveSetCueEnabled(true);
+  toast('Loaded the saved rack — play to win',3200);
+  return true;
+}
+
+/* Labels for an async run.
+ *
+ * STRICTLY REMOTE: there is no second seat on this device. The left column is
+ * always the local player ("You") and the right column is the RIVAL. Boarding
+ * the rival's name into
+ * the left column (as the old seat-1 branch did) is what made Device B read
+ * like a hotseat table whose other player was about to shoot. */
+function soloLabelNames(){
+  players[0].name = 'You';
+  // The rival column is a SCOREBOARD entry, not a player waiting to shoot.
+  // Labelling it "Challenger" read like a hotseat opponent who was up next.
+  players[1].name = SOLO_OPP_NAME || 'Rival';
+  if($('nm0')) $('nm0').textContent = players[0].name;
+  if($('nm1')) $('nm1').textContent = players[1].name;
+  if($('av0')) $('av0').textContent = '😎';
+  if($('av1')) $('av1').textContent = '🐶';
+}
+
+function turnBasedNames(){
+  const opponentName=SOLO_OPP_NAME||'Opponent';
+  players[0].name=TURN_SEAT===0?'You':opponentName;
+  players[1].name=TURN_SEAT===1?'You':opponentName;
+  $('nm0').textContent=players[0].name;
+  $('nm1').textContent=players[1].name;
+  $('av0').textContent=TURN_SEAT===0?'😎':'🐶';
+  $('av1').textContent=TURN_SEAT===1?'😎':'🐶';
+  const badge=$('asyncBadge');
+  if(badge){
+    const waiting=state==='wait'||state==='over';
+    badge.textContent=state==='over'?(terminalTurnSaved?'Match complete':'Turn sent'):waiting?'Waiting for turn':'Your turn';
+    badge.classList.toggle('wait',waiting);
+  }
+}
+
+function soloTimerBanner(){
+  const badge = $('liveBadge');
+  if(!badge) return;
+  badge.textContent = SOLO_ACCEPTER ? 'Play to win' : 'Solo practice';
+  badge.classList.remove('wait');
+}
+
+async function startSoloBackedAsyncMatch(){
+  if(TURN_BASED){
+    try{await startPoolTurnBasedMatch();}
+    catch(error){
+      console.error('[8-ball] could not open the saved turn:',error);
+      waitOverlayShow('Could not load pool match',String(error?.message||error));
+    }
+    return;
+  }
+  // NO HOTSEAT. Both seats play on their OWN device:
+  //   seat 0 (challenger) plays a full run and publishes it;
+  //   seat 1 (rival)     plays a SEPARATE rack using the published table.
+  // Neither player continues the other's table, and an async couple never
+  // swaps turns on one screen. A live duel only happens while the rival is
+  // actually present in the room (bootLiveDuel's presence check), never here.
+  //
+  // Seat 1 without a posted rack starts fresh; the result still settles.
+  mode = 'solo';
+  SOLO_MODE = true;
+  botBusy = false;
+  stopAsyncPoll();
+  SHOT_LOG.length = 0;
+  const startBtn = $('btnStart');
+  if(startBtn){ startBtn.disabled = true; startBtn.textContent = 'Stake match in progress'; }
+  startOverlay.classList.add('hidden');
+  // Name the columns BEFORE anything can be awaited: setNames() writes the
+  // generic 'You / CPU' header and would linger on screen for the duration of
+  // the pool_matches round-trip below. newGame() also calls setNames() and a
+  // winning shot calls renderSlots() -> liveSyncHud(), so the seat labels are
+  // installed once as a patch on those, not written once and forgotten.
+  liveSetCueEnabled(true);
+  setPowerUI(0); updateHud(); renderSlots();
+  const mySeat = SOLO_ACCEPTER ? 1 : 0;
+  soloLabelNames();
+  soloTimerBanner();
+  // Start the arena clock immediately. Nothing is being awaited, so the run is
+  // timed exactly like a normal one; the rack is filled in below.
+  matchStarted = true;
+  try { window.parent.postMessage({ type: 'oddzone:match-ready', matchId: SOLO_MATCH_ID, seat: mySeat, solo: true }, '*'); } catch (e) {}
+  // Tell the arena this frame is an INDEPENDENT run: it must never expect a
+  // second device's move, and must never hand control to a rival mid-turn.
+  try { window.parent.postMessage({ type: 'oddzone:async-run', matchId: SOLO_MATCH_ID, seat: mySeat }, '*'); } catch (e) {}
+
+  // TWO KINDS OF RUN, one engine:
+  //   Player A (first run)  -- own fresh rack, submitted at
+  //                            the end. Nobody else's state is involved.
+  //   Player B (rival)      -- loads Player A's FINISHED run from Supabase and
+  //                            starts on A's exact ball layout, but with B's
+  //                            own result, shots, controls and clock.
+  let savedRun = null;
+  if(SOLO_ACCEPTER){
+    // Supabase is authoritative; a half-played row is not a completed rack.
+    const saved = await readPoolMatch(SOLO_MATCH_ID);
+    savedRun = saved && saved.state && saved.state.locked ? saved.state : null;
+    soloTimerBanner();
+  }
+
+  async function startPoolTurnBasedMatch(){
+    const sb=getSB();
+    if(!sb)throw new Error('Supabase is unavailable. Check your connection and sign-in.');
+    mode='solo';SOLO_MODE=true;botBusy=false;
+    if(TURN_SEAT===0)newGame();
+    const startBtn=$('btnStart');
+    if(startBtn){startBtn.disabled=true;startBtn.textContent='Pool duel in progress';}
+    startOverlay.classList.add('hidden');
+    const rpcName=TURN_SEAT===0?'initialize_pool_turn_duel':'join_pool_turn_duel';
+    const args=TURN_SEAT===0
+      ?{p_challenge_id:SOLO_MATCH_ID,p_state:snapshot([])}
+      :{p_challenge_id:SOLO_MATCH_ID};
+    const{data,error}=await sb.rpc(rpcName,args);
+    if(error)throw error;
+    if(!data||!data.state||!Array.isArray(data.state.balls)){
+      throw new Error('The saved pool table could not be loaded.');
+    }
+    if(Number(data.seat)!==TURN_SEAT)throw new Error('This player does not own the saved pool seat.');
+    asyncState.matchId=String(SOLO_MATCH_ID);
+    asyncState.challengeId=String(SOLO_MATCH_ID);
+    poolOwnChallengeId=String(data.player_challenge_id||SOLO_MATCH_ID);
+    asyncState.turnNumber=Number(data.turn_number)||0;
+    asyncState.ready=true;
+    asyncState.settled=false;
+    turnBasedNames();
+    if(data.status==='completed'&&data.winner_seat!==null&&data.winner_seat!==undefined&&Number.isInteger(Number(data.winner_seat))){
+      asyncWinner=Number(data.winner_seat);
+      asyncEndReason=String(data.state.over?.[1]||'8-ball result');
+      terminalTurnSaved=true;
+      savedFinalChallengeId=poolOwnChallengeId;
+      savedFinalWinnerId=String(data.winner_id||'')||null;
+      await finishPoolTurn(asyncWinner,asyncEndReason);
+      return;
+    }
+    const ownsTurn=Number(data.current_turn)===TURN_SEAT;
+    applySnapshot(data.state,ownsTurn);
+    cur=Number(data.current_turn)||0;
+    if(data.status==='waiting'&&data.pending_winner_seat!==null&&data.pending_winner_seat!==undefined&&Number.isInteger(Number(data.pending_winner_seat))){
+      state='wait';
+      turnBasedNames();
+      liveSetCueEnabled(false);
+      waitOverlayShow('Result Waiting for Rival','Your 8-ball result is saved. The match will settle when a rival accepts the challenge.');
+      try{window.parent.postMessage({type:'oddzone:pool-turn-waiting',challengeId:poolOwnChallengeId,waitingForOpponent:true,matchDecided:true},'*');}catch(e){}
+      return;
+    }
+    if(!data.opponent_joined){
+      if(!ownsTurn){
+        state='wait';
+        turnBasedNames();
+        liveSetCueEnabled(false);
+        waitOverlayShow('Challenge Posted — Waiting for Rival','Your turn is saved. A rival must accept before the next turn can be played.');
+        try{window.parent.postMessage({type:'oddzone:pool-turn-waiting',challengeId:poolOwnChallengeId,waitingForOpponent:true},'*');}catch(e){}
+        return;
+      }
+    }
+    if(!ownsTurn){
+      state='wait';
+      turnBasedNames();
+      liveSetCueEnabled(false);
+      waitOverlayShow('Waiting for your rival','The table is saved. Return to OddZone and reopen Pool when it is your turn.');
+      try{window.parent.postMessage({type:'oddzone:pool-turn-waiting',challengeId:poolOwnChallengeId,waitingForOpponent:false},'*');}catch(e){}
+      return;
+    }
+    const savedState=data.state;
+    const replayShots=Array.isArray(savedState.shots_replay)?savedState.shots_replay:[];
+    if(Number.isInteger(Number(savedState.last_turn_seat))
+      && Number(savedState.last_turn_seat)!==TURN_SEAT
+      && startPoolReplay(
+        savedState,
+        savedState.pre_turn_state,
+        replayShots,
+        Array.isArray(savedState.post_turn_balls)?savedState.post_turn_balls:savedState.balls,
+        Number(savedState.last_turn_seat)
+      ))return;
+    waitOverlayHide();
+    liveSetCueEnabled(true);
+    state=inHand?'place':'aim';
+    beginPoolTurnCapture();
+    setPowerUI(0);updateHud();renderSlots();
+    toast('Your turn — continue the saved table',2800);
+  }
+  newGame();
+  state = 'aim';
+  // Lay out the rival's finished table. If it is genuinely absent, the fresh
+  // rack from newGame() stands and the target still decides the winner -- the
+  // player is never blocked from taking their run. No scary notice: this is a
+  // normal fallback, and the round header already shows the target.
+  const adopted = adoptRivalTable(savedRun);
+  if(SOLO_ACCEPTER && !adopted){
+    toast('The saved rack was unavailable — starting a fresh rack',3200);
+  }
+
+  liveSetCueEnabled(true);
+  setPowerUI(0); updateHud(); renderSlots();
+  if(!SOLO_ACCEPTER){
+    toast('Play your run — it is saved for the next challenger', 2600);
+  }
+}
 
 /* BOT */
 const segDist=(b,x0,y0,x1,y1)=>{const dx=x1-x0,dy=y1-y0,t=clamp(((b.x-x0)*dx+(b.y-y0)*dy)/(dx*dx+dy*dy||1),0,1);return Math.hypot(b.x-(x0+t*dx),b.y-(y0+t*dy));};
@@ -892,12 +2633,19 @@ function botPlan(pos){
   if(!best_){const t=mine.sort((a,b)=>Math.hypot(a.x-cue.x,a.y-cue.y)-Math.hypot(b.x-cue.x,b.y-cue.y))[0]||{x:MIDX,y:MIDY};best_={a:Math.atan2(t.y-cue.y,t.x-cue.x),dist:600,pk:POCKETS.reduce((m,k,i)=>{const dd=Math.hypot(k.x-t.x,k.y-t.y);return dd<m.d?{d:dd,i}:m;},{d:1e9,i:0}).i};}
   return{a:best_.a+(Math.random()-.5)*.03,p:.3+Math.min(best_.dist,1200)/1200*.55,pk:best_.pk,sc:best_.sc===undefined?-9:best_.sc};
 }
-function botTurn(){setTimeout(()=>{if(state!=='aim'||cur!==1){botBusy=false;return;}const sh=botPlan();aimAngle=sh.a;called=eightPhase()?sh.pk:null;setTimeout(()=>{if(state==='aim'&&cur===1)shoot(sh.p,true);botBusy=false;},700);},900);}
+/* COMPUTER OPPONENT — DISABLED.
+ *
+ * OddZone pool is Player vs Player only. The planner below is kept because
+ * the ball-layout code shares its geometry helpers, but no bot may ever take
+ * a shot: every entry point (the frame loop, ball-in-hand, the menu button)
+ * is either removed or gated on this flag. */
+const BOT_DISABLED = true;
+function botTurn(){if(BOT_DISABLED){botBusy=false;return;}setTimeout(()=>{if(state!=='aim'||cur!==1){botBusy=false;return;}const sh=botPlan();aimAngle=sh.a;called=eightPhase()?sh.pk:null;setTimeout(()=>{if(state==='aim'&&cur===1)shoot(sh.p,true);botBusy=false;},700);},900);}
 
 let called=null,wrongRing=null,aimDrag=null;
 let botPlace=null;
 function botPickSpot(){const c=balls[0];let best_=null;for(let x=L+R+6;x<=RT-R-6;x+=54)for(let y=T+R+6;y<=B-R-6;y+=54){if(!balls.every(b=>b===c||b.state!=='active'||Math.hypot(b.x-x,b.y-y)>2*R+4))continue;const sc=botPlan({x,y}).sc+(Math.random()-.5)*.08;if(!best_||sc>best_.sc)best_={x,y,sc};}return best_||{x:c.x,y:c.y};}
-function startBotPlace(){const c=balls[0],s=botPickSpot();botPlace={t:0,wait:.55,dur:1.0,end:.35,x0:c.x,y0:c.y,x1:s.x,y1:s.y};}
+function startBotPlace(){if(BOT_DISABLED)return;const c=balls[0],s=botPickSpot();botPlace={t:0,wait:.55,dur:1.0,end:.35,x0:c.x,y0:c.y,x1:s.x,y1:s.y};}
 function updateBotPlace(dt){const b=botPlace,c=balls[0];b.t+=dt;const k=clamp((b.t-b.wait)/b.dur,0,1),e=k*k*(3-2*k);c.x=b.x0+(b.x1-b.x0)*e;c.y=b.y0+(b.y1-b.y0)*e;c.lastX=c.x;c.lastY=c.y;c.vx=c.vy=0;if(b.t>=b.wait+b.dur+b.end){botPlace=null;inHand=false;state='aim';}}
 const botCarrying=()=>!!botPlace&&botPlace.t>botPlace.wait&&botPlace.t<botPlace.wait+botPlace.dur;
 function legalBall(b){const me=players[cur];if(!b.n)return true;if(!me.group)return b.n!==8;return left(me.group)?grp(b.n)===me.group:b.n===8;}
@@ -917,10 +2665,10 @@ if(window.ResizeObserver)new ResizeObserver(placeAimHint).observe($('stage'));
 let flip=null,drift=null,tapInfo=null;
 $('btnRev').addEventListener('click',()=>{if(needPocket()){askPocket();return;}if(myTurn())flip={a:aimAngle,t:0};});
 let aimPid=null,cueDrag=null;
-const cueTravel=()=>$('cuePanel').clientHeight*.38;
+const cueTravel=()=>$('cuePanel').clientHeight*.3;
 const angDiff=d=>Math.atan2(Math.sin(d),Math.cos(d));
 
-const myPlace=()=>state==='place'&&(mode==='async'?cur===asyncState.mySeat:mode==='bot'?cur===0:true);
+const myPlace=()=>state==='place'&&(mode==='async'?asyncState.ready:true);
 let placePid=null;
 function placeAt(e){const p=toLogical(e),c=balls[0];const x=clamp(p.x+R*2.4,L+R+2,RT-R-2),y=clamp(p.y,T+R+2,B-R-2);if(balls.every(b=>b===c||b.state!=='active'||Math.hypot(b.x-x,b.y-y)>2*R+1)){c.x=x;c.y=y;c.lastX=x;c.lastY=y;}}
 
@@ -974,9 +2722,11 @@ window.addEventListener('keyup',e=>{
 });
 document.addEventListener('click',e=>{if(e.target.closest('button')){ensureAudio();sfx.click();}},true);
 
-$('btnStart').addEventListener('click',()=>{mode='bot';stopAsyncPoll();setNames();ensureAudio();newGame();});
+$('btnStart').addEventListener('click',()=>{if(isLiveMatchRoom){toast('This is a live match — wait for your rival',1800);return;}mode='solo';stopAsyncPoll();setNames();ensureAudio();newGame();});
 $('btnAgain').addEventListener('click',()=>{ensureAudio();newGame();});
 $('btnNew').addEventListener('click',()=>{ensureAudio();newGame();});
+$('btnCheckStatus').addEventListener('click',()=>window.parent.postMessage({type:'oddzone:pool-check-status',challengeId:poolOwnChallengeId},'*'));
+$('skipReplay').addEventListener('click',finishPoolReplay);
 
 /* ---- async "Take Turns" UI ---- */
 const asyncBox=$('asyncBox'),asyncCreateBox=$('asyncCreateBox'),asyncJoinBox=$('asyncJoinBox');
@@ -1038,13 +2788,45 @@ const cx_=cueCv.getContext('2d');let cdpr=1;
 function sizeCue(){cdpr=Math.min(window.devicePixelRatio||1,3);cueCv.style.width=innerWidth+'px';cueCv.style.height=innerHeight+'px';cueCv.width=Math.round(innerWidth*cdpr);cueCv.height=Math.round(innerHeight*cdpr);}
 function drawCue(x,y,ang,pull){
   const r=canvas.getBoundingClientRect(),k=r.width/H;
-  const sx=r.left+y*k,sy=r.top+(W-x)*k,sa=Math.atan2(-Math.cos(ang),Math.sin(ang)),g0=R+3+pull;
+  const sx=r.left+y*k,sy=r.top+(W-x)*k,g0=R+3+pull;
+  const ux=-Math.sin(ang),uy=Math.cos(ang),nx=-uy,ny=ux;
+  const point=(distance,offset,shadowX=0,shadowY=0)=>[
+    sx+ux*distance*k+nx*offset*k+shadowX,
+    sy+uy*distance*k+ny*offset*k+shadowY
+  ];
   const parts=[[0,7,2.5,2.6,'#4a86d6'],[7,23,2.6,2.8,'#f4f0e4'],[23,380,2.8,5.2,'#ebcb95'],[380,388,5.2,5.3,'#c9a24a'],[388,640,5.3,8,'#3a1f12']];
-  cx_.save();cx_.setTransform(cdpr,0,0,cdpr,0,0);cx_.translate(sx,sy);cx_.rotate(sa+Math.PI);cx_.scale(k,k);
-  cx_.save();cx_.translate(3,5);cx_.fillStyle='rgba(0,0,0,.28)';parts.forEach(p=>cx_.fill(quad(g0+p[0],g0+p[1],p[2],p[3])));cx_.restore();
-  const all=new Path2D();
-  parts.forEach(p=>{const q=quad(g0+p[0],g0+p[1],p[2],p[3]);cx_.fillStyle=p[4];cx_.fill(q);all.addPath(q);});
-  cx_.save();cx_.clip(all);const gr=cx_.createLinearGradient(0,-8,0,8);gr.addColorStop(0,'rgba(255,255,255,.45)');gr.addColorStop(.45,'rgba(255,255,255,0)');gr.addColorStop(1,'rgba(0,0,0,.5)');cx_.fillStyle=gr;cx_.fillRect(g0,-9,660,18);cx_.fillStyle='rgba(226,184,88,.6)';for(let j=0;j<3;j++)cx_.fillRect(g0+470+j*18,-9,4,18);cx_.restore();cx_.restore();
+  cx_.save();cx_.setTransform(cdpr,0,0,cdpr,0,0);
+  const outline=(start,end,startWidth,endWidth,shadowX=0,shadowY=0)=>{
+    const path=new Path2D();
+    path.moveTo(...point(g0+start,-startWidth,shadowX,shadowY));
+    path.lineTo(...point(g0+end,-endWidth,shadowX,shadowY));
+    path.lineTo(...point(g0+end,endWidth,shadowX,shadowY));
+    path.lineTo(...point(g0+start,startWidth,shadowX,shadowY));
+    path.closePath();
+    return path;
+  };
+  cx_.fillStyle='rgba(0,0,0,.28)';
+  cx_.fill(outline(0,640,2.5,8,3,5));
+  for(const [start,end,startWidth,endWidth,color] of parts){
+    cx_.fillStyle=color;
+    cx_.fill(outline(start,end,startWidth,endWidth));
+  }
+  cx_.beginPath();
+  cx_.moveTo(...point(g0+26,-2.1));
+  cx_.lineTo(...point(g0+375,-4.4));
+  cx_.strokeStyle='rgba(255,255,255,.32)';
+  cx_.lineWidth=Math.max(.6,k*1.1);
+  cx_.stroke();
+  for(let j=0;j<3;j++){
+    const d=g0+470+j*18;
+    cx_.beginPath();
+    cx_.moveTo(...point(d,-6.5));
+    cx_.lineTo(...point(d,6.5));
+    cx_.strokeStyle='rgba(226,184,88,.6)';
+    cx_.lineWidth=Math.max(.7,k*2.2);
+    cx_.stroke();
+  }
+  cx_.restore();
 }
 
 /* DRAW LOOP */
@@ -1073,11 +2855,18 @@ function draw(){
   if(wrongRing){ctx.beginPath();ctx.arc(wrongRing.x,wrongRing.y,R+wrongRing.t*40,0,7);ctx.lineWidth=3;ctx.strokeStyle='rgba(255,70,70,'+(1-wrongRing.t/.9)+')';ctx.stroke();}
   const cue=balls[0];
   if(cue.state==='active'){
-    if(state==='wait'){
+    // 'wait' means someone else is shooting. That only exists in a LIVE duel;
+    // in an async run this device always shoots, so drawing that caption would
+    // be telling the player to wait for a rival who is not on this table.
+    if(state==='wait'&&mode!=='async'){
       ctx.save();ctx.textAlign='center';ctx.font='800 20px "Avenir Next","Segoe UI",system-ui,sans-serif';
       ctx.lineWidth=5;ctx.strokeStyle='rgba(0,0,0,.6)';
       ctx.strokeText('Your rival is at the table…',cue.x,cue.y-R*3.2);
       ctx.fillStyle='#ffd54a';ctx.fillText('Your rival is at the table…',cue.x,cue.y-R*3.2);ctx.restore();
+    }
+    else if(state==='wait'&&mode==='async'){
+      // Defensive: an async board must never be left unplayable.
+      state='aim';
     }
     else if(state==='aim'){if(!needPocket()){const pw=input.down?input.power:keyPower;drawGuide(cue,aimAngle,pw);drawCue(cue.x,cue.y,aimAngle,pw*MAX_VIS_PULL);}}
     else if(state==='striking'){const k=clamp(strike.t/strike.dur,0,1);drawCue(cue.x,cue.y,strike.angle,strike.from*(1-k*k));}
@@ -1094,8 +2883,10 @@ function update(dt){
   if(flip){flip.t+=dt/.2;const k=Math.min(1,flip.t),e=k*k*(3-2*k);aimAngle=flip.a+Math.PI*e;if(k>=1)flip=null;}
   if(wrongRing&&(wrongRing.t+=dt)>.9)wrongRing=null;
   if(botPlace&&state==='place')updateBotPlace(dt);
-  if(mode==='bot'&&cur===1&&state==='aim'&&!botBusy){botBusy=true;botTurn();}
+  // The computer opponent is disabled: nothing here may take a turn for you
+  // (see botTurn(), which refuses to run while BOT_DISABLED is true).
   if(mode==='async'&&state==='aim')syncAsyncHud();
+  if(state==='aim'&&mode==='online'){liveSetCueEnabled(myTurn());}
   if(state==='aim'){const dir=(keys.right?1:0)-(keys.left?1:0);if(dir&&!needPocket())aimAngle+=dir*(keys.shift?.12:.8)*dt;if(keys.space&&!needPocket()){keyPower=Math.min(1,keyPower+dt*.85);setPowerUI(keyPower);}}
   if(state==='striking'){strike.t+=dt;if(strike.t>=strike.dur)fireCue();}
   if(state==='moving'){
@@ -1114,8 +2905,75 @@ window.addEventListener('resize',()=>{resize();sizeCue();});
 window.addEventListener('orientationchange',()=>setTimeout(resize,150));
 if(window.ResizeObserver)new ResizeObserver(resize).observe($('stage'));
 
+/* Arena auto-match: the host page already claimed the guest seat of a live
+ * room and passes its code in `guestCode`. Joining goes through the exact
+ * verified path the "Open code" panel uses, so the guest receives the host's
+ * saved table and the turn that belongs to seat 1. */
+(function autoJoinFromArena(){
+  const code = (LIVE_PARAMS.get('guestCode') || '').trim().toUpperCase();
+  if (!code || isLiveMatch || !getSB()) return;
+  asyncJoinFromArena(code);
+})();
+async function asyncJoinFromArena(code){
+  asyncStatus('Joining the open match…');
+  try{
+    await joinAsyncMatch(code);
+  }catch(e){
+    // The seat was taken or the room is gone between the lookup and here:
+    // fall back to a private rack instead of a waiting screen nobody fills.
+    console.warn('[8-ball] arena auto-join failed:', e);
+    asyncStatus('That match filled up — starting a fresh rack.','err');
+    mode='solo';stopAsyncPoll();setNames();newGame();
+  }
+}
+window.__oddzoneAutoJoin = asyncJoinFromArena;
+
+/* TEMP QA HOOKS — removed after verification. */
+// Aim at a point, then fire with a given power.
+window.__qaAimAt=(x,y)=>{aimAngle=Math.atan2(y-balls[0].y,x-balls[0].x);};
+window.__qaShoot=(p)=>{if(state==='aim'&&myTurn())shoot(clamp(p||.8,.05,1));};
+// Simulate a legal finish on this table: the eight is the last ball, note which
+// pocket it dropped in and what was hit first, then run the real endShot().
+window.__qaEightFinish=(()=>{let done=false;return()=>{
+  if(done)return false;done=true;
+  const me=players[cur];
+  if(!me.group){players[0].group='s';players[1].group='t';}
+  for(const n of [1,2,3,4,5,6,7,9,10,11,12,13,14,15])if(n!==8)balls[n].state='pocketed';
+  balls[7].state='pocketed';
+  if(balls[8].state==='active')pocketBall(balls[8],POCKETS[0]);
+  balls[8].state='pocketed';
+  firstHit=8;called=0;eightPocket=0;shotPocketed=[8];
+  endShot();return true;
+};})();
+
+/* Pump the physics while the page is in a BACKGROUND tab.
+ *
+ * A run is timed from the wall clock, so a browser that throttles animation
+ * frames (the arena is a hidden tab when the player switches away) would let
+ * the clock reach zero with the balls still in motion and the shot never
+ * registered by endShot(). Timers keep running in a background tab while
+ * requestAnimationFrame does not, so the simulation is stepped here instead. */
+setInterval(()=>{if(document.hidden)update(0.05);},50);
+
 sizeCue();rackBalls();resize();updateHud();setPowerUI(0);
+// Launch straight into the live room when the arena passed a matchId.
+// ASYNC FIRST. A run that carries a challenge id is a private 1-minute run on
+// this device; only a live realtime duel (matchId with no async backing) may
+// enter the presence/broadcast engine, and NEVER while a run is being played.
+// Each step below marks the engine as it goes, so a run that stops early can
+// be attributed to a statement instead of leaving a silent, half-booted page.
+window.__engineStage='boot';
+if(isLiveMatch){
+  window.__engineStage='live';
+  if(SOLO_BACKED) startSoloBackedAsyncMatch();
+  else bootLiveDuel();
+}
+window.__engineStage='loop';
 requestAnimationFrame(t=>{last=t;requestAnimationFrame(frame);});
+// Real-time bracket marker (see __oddzoneRunInfo below), installed here so it is
+// in place even while an async run is still resolving its network reads.
+window.__oddzoneRunStarted=()=>!!firstShotFired;
+window.__engineStage='done';
 })();
 </script>
 </body>

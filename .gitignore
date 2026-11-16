@@ -17,6 +17,7 @@ Thumbs.db
 *.log
 
 # Stray backups and scratch folders
+.codegpt-shots/
 index.html.bak
 ODDZONE MOBILE - Copy/
 ODDZONE GAMES/ODDZONE GAMES - Copy/

@@ -26,7 +26,7 @@
 $ErrorActionPreference = 'Stop'
 
 $base = 'https://csrfrzzpduhhzldirdfi.supabase.co'
-$key  = $env:SUPABASE_SERVICE_ROLE_KEY
+$key = $env:SUPABASE_SERVICE_ROLE_KEY
 
 if (-not $key) {
   Write-Output '>>> SUPABASE_SERVICE_ROLE_KEY is not set.'
@@ -44,9 +44,9 @@ $testA = '075dbb2e-ccaf-42b4-bc46-1cb61abb62c5'
 $testB = '83e95146-b792-4e8f-ab29-13da2a36a155'
 
 $uri = "$base/rest/v1/stake_challenges" +
-       "?status=in.(queued,playing)" +
-       "&user_id=in.($testA,$testB)" +
-       "&order=created_at.asc"
+"?status=in.(queued,playing)" +
+"&user_id=in.($testA,$testB)" +
+"&order=created_at.asc"
 
 $rows = Invoke-RestMethod -Uri $uri -Headers $hdr
 Write-Output ("stale open challenges for the two test accounts: " + @($rows).Count)

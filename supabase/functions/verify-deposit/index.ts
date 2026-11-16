@@ -90,6 +90,10 @@ serve(async (req: Request) => {
 
     const txn = verifyData.data;
 
+    if (String(txn.metadata?.user_id ?? "") !== userId) {
+      return json({ error: "This payment does not belong to the signed-in account." }, 403);
+    }
+
     // Only credit what Paystack actually received, in naira.
     const paidNaira = Math.floor(Number(txn.amount) / 100);
     if (!Number.isFinite(paidNaira) || paidNaira <= 0) {
@@ -108,20 +112,27 @@ serve(async (req: Request) => {
     // A reference can only ever be credited once. record_deposit() is
     // idempotent per call, so guard duplicates here.
     const service = createClient(supabaseUrl, serviceKey);
-    const { data: existing } = await service
+    const { data: existing, error: existingErr } = await service
       .from("transactions")
-      .select("id")
+      .select("id, user_id")
       .eq("reference", reference)
       .maybeSingle();
 
+    if (existingErr) {
+      return json({ error: "Could not check whether this payment was already credited." }, 500);
+    }
+
     if (existing) {
+      if (existing.user_id !== userId) {
+        return json({ error: "This payment was already credited to another account." }, 409);
+      }
       // A retry of an already-credited reference is a success, not an error:
       // the money is in the wallet, which is exactly what the client asked for.
       // Answering 409 here made the app report a failure for a deposit that
       // had in fact gone through.
       return json({
         success: true,
-        credited: 0,
+        credited: paidNaira,
         already_credited: true,
         reference,
       });
@@ -130,6 +141,7 @@ serve(async (req: Request) => {
     // Credit through the SECURITY DEFINER function — the only path that can
     // move a balance now that the profiles UPDATE policy is gone.
     const { data, error: creditErr } = await service.rpc("record_deposit", {
+      p_user_id: userId,
       p_amount: paidNaira,
       p_reference: reference,
     });
@@ -143,15 +155,6 @@ serve(async (req: Request) => {
     // which stamped the reference onto an unrelated transaction (a duel entry,
     // say) and left the deposit row itself unmarked — so the duplicate guard
     // above never matched and a replayed reference could credit twice.
-    const { error: stampErr } = await service
-      .from("transactions")
-      .update({ status: "verified" })
-      .eq("reference", reference);
-
-    if (stampErr) {
-      console.warn("Could not stamp transaction reference:", stampErr.message);
-    }
-
     return json({ success: true, credited: paidNaira, reference, ...data });
   } catch (err) {
     return json({ error: (err as Error).message }, 500);

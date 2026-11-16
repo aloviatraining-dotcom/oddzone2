@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -10,7 +10,7 @@
   <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
   <link rel="stylesheet" href="https://use.typekit.net/cxj8zhk.css">
   <title>Cave Runner</title>
-  <script type="module" crossorigin src="./assets/index.2be0c328.js"></script>
+  <script type="module" crossorigin src="./assets/index.b9891b89.js"></script>
   <link rel="stylesheet" href="./assets/index.31a8da30.css">
 </head>
 
@@ -476,25 +476,6 @@
 
   
 
-  <script>
-    window.__oddzoneReadScore = () => {
-      const scoreEl = document.querySelector('.scores-count') || document.getElementById('current-score');
-      return scoreEl ? (parseInt(scoreEl.textContent, 10) || 0) : 0;
-    };
-    window.__oddzoneIsOver = () => {
-      const modal = document.getElementById('game-over-modal');
-      return modal && window.getComputedStyle(modal).display !== 'none';
-    };
-    let crReported = false;
-    setInterval(() => {
-      if (!crReported && window.__oddzoneIsOver()) {
-        crReported = true;
-        try {
-          parent.postMessage({ type: 'oddzone:game-complete', score: window.__oddzoneReadScore() }, '*');
-        } catch(e) {}
-      }
-    }, 200);
-  </script>
 </body>
 
 </html>

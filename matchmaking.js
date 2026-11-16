@@ -5,13 +5,25 @@ import { supabase } from "./supabaseClient.js";
 // Helper to get client
 // ------------------------------------------------------------------
 const getClient = () => supabase || window.supabaseClientInstance || (window.getSupabaseAuthClient ? window.getSupabaseAuthClient() : null);
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, character => ({
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;'
+})[character]);
+let pendingBetsLoadSequence = 0;
+const isUnavailableChallengeError = (error) =>
+  /challenge.*(?:no longer available|just accepted|already accepted|not available|inactive)|(?:no longer available|just accepted).*challenge/i
+    .test(String(error?.message || error || ''));
 
 // ------------------------------------------------------------------
 // Load pending bets / challenges available for other players to join
 // ------------------------------------------------------------------
-export const loadPendingBets = async () => {
+export const loadPendingBets = async (notice = '') => {
   const container = document.getElementById("pending-bets-panel");
   if (!container) return;
+  const loadSequence = ++pendingBetsLoadSequence;
 
   const client = getClient();
   if (!client) {
@@ -23,52 +35,79 @@ export const loadPendingBets = async () => {
   try {
     const { data: sessionData } = await client.auth.getSession();
     currentUserId = sessionData?.session?.user?.id || (window.activeUser && window.activeUser.id) || null;
-  } catch (e) {}
+  } catch (error) {
+    console.warn('Could not read the signed-in user for open challenges:', error);
+    currentUserId = window.activeUser?.id || null;
+  }
+  if (loadSequence !== pendingBetsLoadSequence) return;
+  if (!currentUserId || window.activeUser?.isGuest) {
+    container.innerHTML = `<p class="rounded-xl border border-white/10 bg-cardBg px-4 py-3 text-xs text-slate-400">Log in to view real open challenges from other players.</p>`;
+    return;
+  }
 
   try {
-    // Look for active queued stake challenges from other players
-    let query = client
+    if (!notice) {
+      container.innerHTML = `<p class="rounded-xl border border-white/10 bg-cardBg px-4 py-3 text-xs text-slate-400">Loading live open challenges…</p>`;
+    }
+    const { data, error } = await client
       .from("stake_challenges")
       .select("id, game_id, stake, payout, status, created_at, user_id")
       .eq("status", "queued")
       .is("opponent_id", null)
       .is("settled_at", null)
       .is("refund_amount", null)
+      .neq("user_id", currentUserId)
       .order("created_at", { ascending: false })
       .limit(10);
-
-    if (currentUserId) {
-      query = query.neq("user_id", currentUserId);
-    }
-
-    const { data, error } = await query;
     if (error) throw error;
+    if (loadSequence !== pendingBetsLoadSequence) return;
 
-    if (!data || !data.length) {
-      container.innerHTML = `<p class="rounded-xl border border-white/10 bg-cardBg px-4 py-3 text-xs text-slate-400">No open challenges waiting right now. Start a 1v1 match above!</p>`;
-      return;
+    let profiles = [];
+    if (data?.length) {
+      const ownerIds = [...new Set(data.map(row => row.user_id).filter(Boolean))];
+      const { data: profileRows, error: profilesError } = await client
+        .from('public_profiles')
+        .select('user_id, username')
+        .in('user_id', ownerIds);
+      if (profilesError) throw profilesError;
+      profiles = profileRows || [];
     }
+    if (loadSequence !== pendingBetsLoadSequence) return;
+    const ownerNames = new Map((profiles || []).map(profile => [
+      String(profile.user_id),
+      profile.username || 'Player'
+    ]));
 
-    container.innerHTML = data
+    const noticeMarkup = notice
+      ? `<p class="rounded-xl border border-amber-400/20 bg-amber-400/5 px-4 py-3 text-xs text-amber-200">${escapeHtml(notice)}</p>`
+      : '';
+    const challengesMarkup = !data?.length
+      ? `<p class="rounded-xl border border-white/10 bg-cardBg px-4 py-3 text-xs text-slate-400">No open challenges waiting right now. Start a 1v1 match above!</p>`
+      : data
       .map((bet) => {
         const gameCatalog = window.GAME_CATALOG || [];
         const gameTitle = gameCatalog.find((g) => g.id === bet.game_id)?.title || bet.game_id || "1v1 Battle";
-        const dateStr = bet.created_at ? new Date(bet.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Live";
+        const createdAt = bet.created_at ? new Date(bet.created_at) : null;
+        const dateStr = createdAt && !Number.isNaN(createdAt.getTime())
+          ? createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          : "Live";
+        const ownerName = ownerNames.get(String(bet.user_id)) || 'Player';
         return `
         <div class="flex items-center justify-between gap-3 rounded-xl border border-amber-400/20 bg-gradient-to-r from-[#171226] to-[#120d20] p-3.5 shadow-md">
           <div class="min-w-0">
             <div class="flex items-center gap-1.5">
               <span class="inline-block h-2 w-2 rounded-full bg-amber-400 animate-pulse"></span>
-              <p class="truncate text-xs font-bold text-white">${gameTitle}</p>
+              <p class="truncate text-xs font-bold text-white">${escapeHtml(gameTitle)}</p>
             </div>
-            <p class="mt-1 text-[10px] text-amber-200">Stake: <span class="font-bold">₦${Number(bet.stake).toLocaleString()}</span> · <span class="text-slate-400">${dateStr}</span></p>
+            <p class="mt-1 truncate text-[10px] text-slate-300">${escapeHtml(ownerName)} · Stake: <span class="font-bold text-amber-200">₦${Number(bet.stake).toLocaleString()}</span> · <span class="text-slate-400">${dateStr}</span></p>
           </div>
-          <button class="join-challenge-btn shrink-0 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 px-3.5 py-2 text-xs font-extrabold text-[#1a0e00] shadow-sm transition hover:brightness-110 active:scale-95" data-id="${bet.id}" data-game="${bet.game_id}" data-stake="${bet.stake}">
+          <button class="join-challenge-btn shrink-0 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 px-3.5 py-2 text-xs font-extrabold text-[#1a0e00] shadow-sm transition hover:brightness-110 active:scale-95" data-id="${escapeHtml(bet.id)}" data-game="${escapeHtml(bet.game_id)}" data-stake="${Number(bet.stake)}">
             Accept Duel
           </button>
         </div>`;
       })
       .join("");
+    container.innerHTML = noticeMarkup + challengesMarkup;
 
     container.querySelectorAll(".join-challenge-btn").forEach((btn) => {
       btn.addEventListener("click", async () => {
@@ -89,6 +128,7 @@ export const loadPendingBets = async () => {
     });
   } catch (err) {
     console.warn("loadPendingBets error:", err);
+    if (loadSequence !== pendingBetsLoadSequence) return;
     container.innerHTML = `<p class="rounded-xl border border-white/10 bg-cardBg px-4 py-3 text-xs text-rose-300">Could not load open challenges. Check your connection and try again.</p>`;
   }
 };
@@ -108,9 +148,14 @@ export const acceptChallengeDuel = async (betId, gameId, stake) => {
 
   try {
     await window.acceptStakeChallenge(betId, gameId, Number(stake));
+    await loadPendingBets();
   } catch (err) {
     console.warn("accept_duel_challenge failed:", err);
     const message = err?.message || "Could not confirm acceptance. Retry this same challenge to safely check its status.";
+    if (isUnavailableChallengeError(err)) {
+      await loadPendingBets('That challenge was already taken or closed. The list is up to date.');
+      return;
+    }
     alert(message);
     if (/insufficient balance/i.test(message) && typeof window.switchTab === "function") {
       window.switchTab("wallet");

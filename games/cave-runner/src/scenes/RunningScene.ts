@@ -471,6 +471,15 @@ export default class RunningScene extends Scene {
     return this.scores;
   }
 
+  // The arena's Tap-to-Start. restartGame() is the only reset path that puts
+  // the scene back into a playable state (clock running, speed restored,
+  // paused/game-over cleared, counters zeroed), but it is private and was
+  // previously reachable only through the in-game quit/retry buttons. Exposing
+  // it here is what makes __oddzoneStart() actually start a live run.
+  startOddZoneMatch() {
+    this.restartGame();
+  }
+
   endOddZoneMatch() {
     this.isGameOver = true;
     this.isGamePaused = true;

@@ -1,4 +1,4 @@
-﻿// Parse every plpgsql function body in the migration with a real PostgreSQL
+// Parse every plpgsql function body in the migration with a real PostgreSQL
 // client library, so a syntax error is caught here instead of at db push.
 //
 // This does NOT connect to a database -- it only parses. That is exactly what

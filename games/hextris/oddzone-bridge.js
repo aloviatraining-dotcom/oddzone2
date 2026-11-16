@@ -1,3 +1,5 @@
+// Loaded FIRST so its start/end hooks survive index.html's own inline adapter
+// (defined further down the page, which assigns the same globals last).
 (()=>{
   function stopInput(event){event.preventDefault();event.stopImmediatePropagation()}
   window.__oddzoneReadScore=()=>Number(window.score||0);

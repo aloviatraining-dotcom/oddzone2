@@ -33,18 +33,21 @@ export const signInWithGoogle = async () => {
 
         const { data, error } = await client.auth.signInWithOAuth({
             provider: "google",
-            options: { redirectTo: redirectUrl },
+            options: { redirectTo: redirectUrl, skipBrowserRedirect: true },
         });
-        if (error) {
-            console.error("Google login error:", error);
-            if (typeof window.setAuthStatus === 'function') {
-                window.setAuthStatus(error.message || 'Google sign-in failed.', true);
-            }
-        }
+        if (error) throw error;
+        if (!data?.url) throw new Error('Supabase did not return a Google sign-in URL.');
+        window.location.assign(data.url);
     } catch (err) {
         console.error("Google sign-in exception:", err);
         if (typeof window.setAuthStatus === 'function') {
-            window.setAuthStatus(err.message || 'Google sign-in failed.', true);
+            const message = err.message || '';
+            window.setAuthStatus(
+                /unsupported provider|provider is not enabled/i.test(message)
+                    ? 'Google sign-in is not enabled for this app yet. The site administrator must enable Google in Supabase Authentication settings and add the Google OAuth client credentials.'
+                    : message || 'Google sign-in could not be started. Please try again.',
+                true
+            );
         }
     }
 };

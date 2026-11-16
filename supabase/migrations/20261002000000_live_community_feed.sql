@@ -33,6 +33,27 @@ create table if not exists public.feed_posts (
   created_at    timestamptz not null default now()
 );
 
+-- Upgrade an existing feed_posts table created by an earlier version.
+alter table public.feed_posts
+  add column if not exists type text not null default 'text';
+
+-- Earlier versions used UUID post ids, while the current feed also uses
+-- prefixed client-generated ids for posts and duel challenges.
+do $$
+begin
+  if exists (
+    select 1
+      from information_schema.columns
+     where table_schema = 'public'
+       and table_name = 'feed_posts'
+       and column_name = 'id'
+       and udt_name = 'uuid'
+  ) then
+    alter table public.feed_posts
+      alter column id type text using id::text;
+  end if;
+end $$;
+
 create index if not exists feed_posts_created_at_idx
   on public.feed_posts (created_at desc);
 create index if not exists feed_posts_user_id_idx

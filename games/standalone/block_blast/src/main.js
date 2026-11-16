@@ -13,6 +13,17 @@ import { updateAndDrawParticles } from "./particles.js";
 import { updateAndDrawFloatingTexts } from "./floatingText.js";
 import { spriteMap } from "./spriteMap.js";
 
+// OddZone score adapter. This game is a native ES module, so its imports live
+// in module scope and the host page's readActiveGameScore() (index.html) has no
+// way in. Publishing these four globals is what lets the parent read the live
+// score and bank it at the end of a timed match.
+window.__oddzoneReadScore = () => Number(gameState.score) || 0;
+window.__oddzoneIsOver = () => gameState.isGameOver();
+window.__oddzoneStart = () => gameState.reset();
+window.__oddzoneEnd = () => {
+  if (!gameState.isGameOver()) gameState.gameOver();
+};
+
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 

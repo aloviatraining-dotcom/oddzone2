@@ -46,6 +46,9 @@ const switchToRunningScene = () => {
 (window as any).__oddzoneStart = async () => {
   await gameAssetsReadyPromise;
   switchToRunningScene();
+  // switchToRunningScene() only shows the scene; without this the clock is
+  // stopped and speed is 0, so the run never advances and the score stays put.
+  runningScene.startOddZoneMatch();
 };
 (window as any).__oddzoneEnd = () => runningScene.endOddZoneMatch();
 

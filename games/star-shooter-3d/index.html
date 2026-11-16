@@ -6,8 +6,10 @@
   <title>Star Shooter 3D - Epic Space Combat</title>
   <meta name="description" content="An intense 3D arcade space shooter game built with Three.js and Web Audio API. Pilot your fighter, destroy enemy swarms, collect power-ups, defeat colossal sector bosses, and survive across endless waves.">
   <link rel="stylesheet" href="style.css">
-  <!-- Three.js CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <!-- Three.js CDN. Pinned BELOW 0.160.0 on purpose: the legacy build/*.min.js
+       UMD bundle was removed in r160, so that exact URL loads a stub that never
+       defines the global THREE. r159 is the last version that does. -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js"></script>
 </head>
 <body>
   <div id="gameContainer">
