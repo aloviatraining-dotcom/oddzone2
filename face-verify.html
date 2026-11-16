@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#07111b" />
+    <title>OddZone · Face Verification</title>
+    <!--
+        Standalone facial biometric verification component.
+
+        Hosted on the same origin as index.html so the matching Supabase session
+        (localStorage) is shared. To use it inside a modal instead, import
+        face-verify.js and call OddZoneFaceVerify.mount(document.querySelector('#host')).
+
+        Requires: the verify-identity Edge Function and migration
+        20261019000003_facial_biometric_verification.sql.
+    -->
+    <!-- Pinned major: "@2" alone let the CDN resolve a brand-new minor between
+         QA runs, which makes a passing page fail without any local change. -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.js"></script>
+    <script src="supabaseClient.js" type="module"></script>
+    <style>
+        :root {
+            --bg: #07111b;
+            --card: #0d1b26;
+            --line: rgba(255, 255, 255, 0.1);
+            --text: #e6f1f5;
+            --muted: #93a8b3;
+            --cyan: #22d3ee;
+            --green: #34d399;
+            --amber: #fbbf24;
+            --red: #fb7185;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: radial-gradient(1200px 600px at 50% -10%, #0f2b3a 0%, var(--bg) 55%);
+            color: var(--text);
+            font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        }
+
+        .fv-card {
+            width: 100%;
+            max-width: 440px;
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 28px;
+            padding: 22px;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .fv-header { display: flex; align-items: center; gap: 12px; }
+        .fv-header h1 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
+        .fv-header p { margin: 2px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+        .fv-badge {
+            flex: none;
+            width: 42px; height: 42px;
+            border-radius: 14px;
+            display: grid; place-items: center;
+            background: rgba(34, 211, 238, 0.12);
+            border: 1px solid rgba(34, 211, 238, 0.35);
+            color: var(--cyan);
+        }
+
+        .fv-field { display: flex; flex-direction: column; gap: 6px; }
+        .fv-field label { font-size: 12px; font-weight: 600; color: #c6d6de; }
+
+        .fv-id-row { display: flex; gap: 8px; }
+        .fv-id-row select, .fv-id-row input {
+            appearance: none;
+            background: #08141d;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            color: var(--text);
+            font-size: 15px;
+            padding: 13px 14px;
+            outline: none;
+            transition: border-color .15s ease;
+        }
+        .fv-id-row select { width: 92px; }
+        .fv-id-row input { flex: 1; min-width: 0; font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; letter-spacing: 0.12em; }
+        .fv-id-row select:focus, .fv-id-row input:focus { border-color: var(--cyan); }
+
+        .fv-consent {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            font-size: 11px;
+            line-height: 1.6;
+            color: var(--muted);
+            background: rgba(34, 211, 238, 0.05);
+            border: 1px solid rgba(34, 211, 238, 0.18);
+            border-radius: 16px;
+            padding: 12px;
+        }
+        .fv-consent input { margin-top: 2px; accent-color: var(--cyan); width: 16px; height: 16px; flex: none; }
+
+        /* ── Camera stage ─────────────────────────────────────────────────── */
+        .fv-stage {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 4 / 5;
+            border-radius: 24px;
+            overflow: hidden;
+            background: #03090e;
+            border: 1px solid var(--line);
+        }
+        #webcam {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            /* Mirror the preview only: people line up a selfie as in a mirror.
+               The captured frame is the raw (unmirrored) video. */
+            transform: scaleX(-1);
+            opacity: 0;
+            transition: opacity .35s ease;
+        }
+        #webcam.is-live { opacity: 1; }
+
+        .fv-mask { position: absolute; inset: 0; pointer-events: none; }
+        /* Dim everything outside the face circle, then draw the ring. */
+        .fv-mask::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: rgba(3, 9, 14, 0.62);
+            -webkit-mask: radial-gradient(circle at 50% 44%, transparent 0 34%, #000 34.6%);
+                    mask: radial-gradient(circle at 50% 44%, transparent 0 34%, #000 34.6%);
+        }
+        .fv-ring {
+            position: absolute;
+            left: 50%; top: 44%;
+            width: 68%; aspect-ratio: 1; /* 4:5 stage -> 68% of width is a circle */
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            border: 3px dashed rgba(34, 211, 238, 0.85);
+            box-shadow: inset 0 0 60px rgba(34, 211, 238, 0.15), 0 0 24px rgba(34, 211, 238, 0.2);
+        }
+        .fv-ring.is-scanning {
+            border-style: solid;
+            border-color: var(--cyan);
+            animation: fv-pulse 1s ease-in-out infinite;
+        }
+        @keyframes fv-pulse {
+            0%, 100% { box-shadow: inset 0 0 60px rgba(34, 211, 238, 0.15), 0 0 24px rgba(34, 211, 238, 0.2); }
+            50% { box-shadow: inset 0 0 90px rgba(34, 211, 238, 0.35), 0 0 44px rgba(34, 211, 238, 0.45); }
+        }
+        .fv-countdown {
+            position: absolute;
+            left: 50%; top: 44%;
+            transform: translate(-50%, -50%);
+            font-size: 72px;
+            font-weight: 800;
+            color: #fff;
+            text-shadow: 0 0 30px rgba(34, 211, 238, 0.8);
+            opacity: 0;
+            transition: opacity .12s ease, transform .12s ease;
+        }
+        .fv-countdown.is-visible { opacity: 1; transform: translate(-50%, -50%) scale(1.06); }
+
+        /* "is-live" is the opposite of .fv-stage.is-live (camera running), so
+           this only exists while the enable-camera prompt is on screen. */
+        .fv-stage:not(.is-live) .fv-hint { display: none; }
+
+        .fv-hint {
+            position: absolute;
+            left: 12px; right: 12px; bottom: 12px;
+            padding: 9px 12px;
+            border-radius: 12px;
+            background: rgba(3, 9, 14, 0.78);
+            border: 1px solid var(--line);
+            font-size: 11px;
+            color: #c6d6de;
+            text-align: center;
+            line-height: 1.45;
+        }
+
+        .fv-start {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            /* Above centre: the ring (a fixed 68% circle on a 4:5 stage) reaches
+               ~15px below the middle, so text starting at centre would cross it. */
+            justify-content: flex-start;
+            padding-top: calc(44% - 15px);
+            gap: 10px;
+            text-align: center;
+            border: 0;
+            background: transparent;
+            color: var(--text);
+            cursor: pointer;
+            font: inherit;
+        }
+        .fv-start .fv-start-icon {
+            /* Padding-block keeps a pixel of gap between the 48px glyph and the
+               72px circle: a grid child's 1em line-height otherwise makes the box
+               square at 48px and clip the icon with overflow: hidden. */
+            padding-block: 1px;
+            flex: none;
+            width: 72px; height: 72px;
+            border-radius: 50%;
+            display: grid; place-items: center;
+            background: rgba(34, 211, 238, 0.14);
+            border: 1px solid rgba(34, 211, 238, 0.4);
+            color: var(--cyan);
+            font-size: 26px;
+        }
+        .fv-start strong { font-size: 13px; }
+        /* Narrower than the ring's inner width, so the caption wraps inside it. */
+        .fv-start small { font-size: 11px; color: var(--muted); max-width: 180px; line-height: 1.45; }
+        .fv-stage.is-live .fv-start { display: none; }
+
+        /* ── Actions and feedback ─────────────────────────────────────────── */
+        .fv-policy-link {
+            align-self: center;
+            background: none;
+            border: 0;
+            padding: 2px 6px;
+            color: var(--cyan);
+            font: inherit;
+            font-size: 11px;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+            cursor: pointer;
+        }
+
+        .fv-button {
+            width: 100%;
+            border: 0;
+            border-radius: 16px;
+            padding: 15px;
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            color: #04120d;
+            background: linear-gradient(90deg, var(--cyan), var(--green));
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: filter .15s ease, opacity .15s ease;
+        }
+        .fv-button:hover:not(:disabled) { filter: brightness(1.06); }
+        .fv-button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+        .fv-status {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            border-radius: 16px;
+            padding: 12px 14px;
+            font-size: 12px;
+            line-height: 1.6;
+            border: 1px solid var(--line);
+            background: #0a1722;
+            color: var(--muted);
+            min-height: 46px;
+        }
+        .fv-status .fv-dot {
+            flex: none;
+            width: 9px; height: 9px;
+            margin-top: 5px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+        .fv-status[data-tone="info"] { color: #a9c1cc; }
+        .fv-status[data-tone="busy"] { color: var(--cyan); border-color: rgba(34, 211, 238, 0.3); }
+        .fv-status[data-tone="busy"] .fv-dot { animation: fv-blink 1s ease-in-out infinite; }
+        .fv-status[data-tone="success"] { color: var(--green); border-color: rgba(52, 211, 153, 0.35); background: rgba(52, 211, 153, 0.08); }
+        .fv-status[data-tone="error"] { color: var(--red); border-color: rgba(251, 113, 133, 0.35); background: rgba(251, 113, 133, 0.07); }
+        .fv-status[data-tone="pending"] { color: var(--amber); border-color: rgba(251, 191, 36, 0.35); background: rgba(251, 191, 36, 0.07); }
+        @keyframes fv-blink { 50% { opacity: 0.25; } }
+
+        .fv-progress {
+            height: 3px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            overflow: hidden;
+        }
+        .fv-progress > span {
+            display: block;
+            height: 100%;
+            width: 0;
+            border-radius: inherit;
+            background: linear-gradient(90deg, var(--cyan), var(--green));
+            transition: width .4s ease;
+        }
+
+        .fv-footnote { margin: 0; font-size: 10px; line-height: 1.6; color: #6f8792; text-align: center; }
+
+        @media (prefers-reduced-motion: reduce) {
+            .fv-ring.is-scanning, .fv-status[data-tone="busy"] .fv-dot { animation: none; }
+            * { transition: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <main class="fv-card" id="oddzone-face-verify">
+        <header class="fv-header">
+            <div class="fv-badge" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 3l7 3v6c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6z" />
+                    <path d="M9 12.5l2 2 4-4.5" />
+                </svg>
+            </div>
+            <div>
+                <h1>Verify your identity</h1>
+                <p>We match a live selfie to the photo on file for your NIN or BVN.</p>
+            </div>
+        </header>
+
+        <div class="fv-field">
+            <label for="fv-id-type">ID type</label>
+            <div class="fv-id-row">
+                <select id="fv-id-type">
+                    <option value="nin">NIN</option>
+                    <option value="bvn">BVN</option>
+                </select>
+                <input id="fv-id-number" type="text" inputmode="numeric" autocomplete="off" maxlength="11"
+                       placeholder="11-digit number" aria-label="NIN or BVN number" />
+            </div>
+        </div>
+
+        <label class="fv-consent">
+            <input type="checkbox" id="fv-consent" />
+            <span>
+                I consent to OddZone sending my NIN/BVN, selfie and liveness frames to its verification
+                provider to confirm my identity. See the
+                <a class="fv-policy-link" id="fv-policy-link" href="index.html#privacy" target="_top">privacy notice</a>.
+            </span>
+        </label>
+
+        <div class="fv-stage" id="fv-stage">
+            <video id="webcam" playsinline autoplay muted aria-label="Live camera preview"></video>
+            <div class="fv-mask" aria-hidden="true"><div class="fv-ring" id="fv-ring"></div></div>
+            <div class="fv-countdown" id="fv-countdown" aria-live="assertive"></div>
+            <p class="fv-hint" id="fv-hint">Centre your face in the circle and hold still.</p>
+            <button type="button" class="fv-start" id="fv-start-camera">
+                <span class="fv-start-icon" aria-hidden="true">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 011 1v9a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z" />
+                        <circle cx="12" cy="13" r="3.4" />
+                    </svg>
+                </span>
+                <strong>Enable camera</strong>
+                <small>Your camera stays on this device until you capture.</small>
+            </button>
+        </div>
+
+        <button type="button" class="fv-button" id="fv-capture" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" />
+                <circle cx="12" cy="12" r="3.2" />
+            </svg>
+            <span id="fv-capture-label">Capture &amp; Verify Identity</span>
+        </button>
+
+        <div class="fv-progress" aria-hidden="true"><span id="fv-progress-bar"></span></div>
+
+        <div class="fv-status" id="fv-status" data-tone="info" role="status" aria-live="polite">
+            <span class="fv-dot" aria-hidden="true"></span>
+            <span id="fv-status-text">Enter your ID number, tick consent, then enable the camera.</span>
+        </div>
+
+        <p class="fv-footnote">Your selfie is sent only to the verification provider over an encrypted connection and is not stored by this page.</p>
+    </main>
+
+    <script src="face-verify.js" defer></script>
+</body>
+</html>
