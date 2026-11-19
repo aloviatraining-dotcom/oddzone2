@@ -37,23 +37,77 @@
         // so there is a single source of truth for the public key.
     </script>
     <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Plus Jakarta Sans', 'sans-serif'],
-                    },
-                    colors: {
-                        darkBg: '#0b0816',
-                        cardBg: '#16112e',
-                        cardHover: '#1f163f',
-                        accentGreen: '#00E676',
-                        accentBlue: '#00b0ff',
-                        brandPurple: '#7c4dff',
-                    }
-                }
+        // ── asset URLs ───────────────────────────────────────────────────────
+        // This app is published as a PROJECT PAGE
+        // (https://<user>.github.io/<repo>/), so a root-relative
+        // "/games/previews/x.svg" resolves against the host root, escapes the
+        // repo directory and renders the browser's broken-image icon. Deriving
+        // every asset URL from this script's own location keeps images and
+        // game files inside the project directory, whatever it is called.
+        window.ODDZONE_ASSET_PREFIX = (function () {
+            try {
+                const scriptUrl = document.currentScript && document.currentScript.src;
+                if (!scriptUrl) return '';
+                // ".../OddZone-Bet/index.html" -> ".../OddZone-Bet/"
+                return scriptUrl.slice(0, scriptUrl.lastIndexOf('/') + 1);
+            } catch (error) {
+                return '';
             }
+        })();
+
+        // Turns a repo-relative asset path ("games/previews/x.svg") into a URL
+        // that resolves under the app directory. Absolute URLs are untouched.
+        function assetUrl(pathOrUrl) {
+            const raw = String(pathOrUrl || '').trim();
+            if (!raw) return '';
+            if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+            // Already correct relative form: leave it alone.
+            if (raw.startsWith('./') || raw.startsWith('../')) return raw;
+            // Repo-root relative: anchor it to the app directory, not the host.
+            return (window.ODDZONE_ASSET_PREFIX || './') + raw.replace(/^\/+/, '');
         }
+
+        // Static <img> cards keep a readable repo-relative path in the markup
+        // and are re-pointed at the deploy-safe URL the moment they exist, so
+        // the browser never keeps a request for a path that is guaranteed to
+        // 404 (which is what paints the broken-image placeholder).
+        function applyStaticAssetSources() {
+            document.querySelectorAll('img[data-asset-src]').forEach(function (img) {
+                const resolved = assetUrl(img.getAttribute('data-asset-src'));
+                if (resolved && resolved !== img.getAttribute('src')) img.setAttribute('src', resolved);
+            });
+        }
+        applyStaticAssetSources();
+        document.addEventListener('DOMContentLoaded', applyStaticAssetSources);
+    </script>
+    <script>
+        // The CDN build (also re-served and cached by some mobile carriers)
+        // does not always publish window.tailwind synchronously. `tailwind` is
+        // a bare global here, so on a slow or blocked CDN this line throws a
+        // ReferenceError, which aborts the whole inline script below and leaves
+        // the page dead. Create the holder first and configure it if it exists.
+        (function () {
+            if (!window.tailwind) window.tailwind = {};
+            if (!window.tailwind.config) {
+                window.tailwind.config = {
+                    theme: {
+                        extend: {
+                            fontFamily: {
+                                sans: ['Plus Jakarta Sans', 'sans-serif'],
+                            },
+                            colors: {
+                                darkBg: '#0b0816',
+                                cardBg: '#16112e',
+                                cardHover: '#1f163f',
+                                accentGreen: '#00E676',
+                                accentBlue: '#00b0ff',
+                                brandPurple: '#7c4dff',
+                            }
+                        }
+                    }
+                };
+            }
+        })();
     </script>
     <style>
         body {
@@ -270,11 +324,11 @@
             <section id="view-welcome" class="flex min-h-full flex-col justify-center px-6 py-10" aria-labelledby="welcome-title">
                 <div class="mx-auto w-full max-w-sm">
                     <div class="mb-8 grid grid-cols-3 gap-2" aria-label="Game previews">
-                        <img src="games/previews/8-ball-pool.svg" alt="" class="col-span-2 aspect-[16/9] w-full rounded-2xl object-cover ring-1 ring-emerald-300/30">
-                        <img src="games/previews/piano-tiles.svg" alt="" class="aspect-[16/9] h-full w-full rounded-2xl object-cover ring-1 ring-fuchsia-300/30">
-                        <img src="games/previews/pipe-hopper.svg" alt="" class="aspect-[16/9] w-full rounded-xl object-cover">
-                        <img src="games/previews/block-blast.svg" alt="" class="aspect-[16/9] w-full rounded-xl object-cover">
-                        <img src="games/previews/cave-runner.svg" alt="" class="aspect-[16/9] w-full rounded-xl object-cover">
+                        <img src="games/previews/8-ball-pool.svg" data-asset-src="games/previews/8-ball-pool.svg" alt="" class="col-span-2 aspect-[16/9] w-full rounded-2xl object-cover ring-1 ring-emerald-300/30">
+                        <img src="games/previews/piano-tiles.svg" data-asset-src="games/previews/piano-tiles.svg" alt="" class="aspect-[16/9] h-full w-full rounded-2xl object-cover ring-1 ring-fuchsia-300/30">
+                        <img src="games/previews/pipe-hopper.svg" data-asset-src="games/previews/pipe-hopper.svg" alt="" class="aspect-[16/9] w-full rounded-xl object-cover">
+                        <img src="games/previews/block-blast.svg" data-asset-src="games/previews/block-blast.svg" alt="" class="aspect-[16/9] w-full rounded-xl object-cover">
+                        <img src="games/previews/cave-runner.svg" data-asset-src="games/previews/cave-runner.svg" alt="" class="aspect-[16/9] w-full rounded-xl object-cover">
                     </div>
                     <div class="text-center">
                         <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-pink-600 via-brandPurple to-cyan-400 shadow-lg shadow-brandPurple/25">
@@ -463,7 +517,7 @@
                     <button type="button" id="home-featured-game" onclick="openGameOptions('8ball')"
                         class="relative w-full overflow-hidden rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-emerald-900/60 via-[#0b1f17] to-darkBg p-4 text-left transition hover:border-emerald-300/60">
                         <div class="flex items-center gap-3.5">
-                            <img src="games/previews/8-ball-pool.svg" alt="8-Ball Pool table preview"
+                            <img src="games/previews/8-ball-pool.svg" data-asset-src="games/previews/8-ball-pool.svg" alt="8-Ball Pool table preview"
                                 class="h-14 w-20 shrink-0 rounded-xl object-cover ring-1 ring-emerald-300/30">
                             <div class="min-w-0 flex-1">
                                 <p class="truncate text-base font-extrabold text-white">8-Ball Pool</p>
@@ -1986,7 +2040,7 @@
 
                 const art = document.createElement('img');
                 art.className = 'h-16 w-24 shrink-0 rounded-xl object-cover';
-                art.src = game.preview;
+                art.src = assetUrl(game.preview);
                 art.alt = `${game.title} game preview`;
                 art.loading = 'lazy';
 
@@ -2031,7 +2085,7 @@
                 card.addEventListener('click', () => openGameOptions(game.id));
                 const preview = document.createElement('img');
                 preview.className = 'mb-3 block aspect-[16/9] w-full rounded-xl object-cover';
-                preview.src = game.preview;
+                preview.src = assetUrl(game.preview);
                 preview.alt = `${game.title} game preview`;
                 preview.loading = 'lazy';
                 const title = document.createElement('span');
@@ -6877,7 +6931,56 @@
             // For "/OddZone-Bet/index.html" the base is "/OddZone-Bet/".
             // For "/" the base is "/" (already correct, no change needed).
             const base = lastSlash === -1 ? '/' : path.slice(0, lastSlash + 1);
-            return base.endsWith('/') ? base : base + '/';
+            if (base.endsWith('/')) return base;
+            // GitHub Pages also serves ".../OddZone-Bet" (no trailing slash).
+            return base + '/';
+        }
+
+        // The directory names that make up the repo root, as they exist on disk.
+        // GitHub Pages matches paths case-sensitively, so a catalog entry like
+        // "games/standalone/8-Ball-Pool.html" would 404 even though the file is
+        // right there as "8-ball-pool.html". Catalog paths are corrected against
+        // this list before they are requested.
+        const GAME_PATH_SEGMENT_CASE = {
+            games: 'games',
+            standalone: 'standalone',
+            previews: 'previews',
+            'star-shooter-3d': 'star-shooter-3d',
+            pacman: 'pacman',
+            hextris: 'hextris',
+            'neon-serpent': 'neon-serpent',
+            'cave-runner': 'cave-runner',
+            dist: 'dist',
+            block_blast: 'block_blast'
+        };
+        const GAME_FILE_NAME_CASE = {
+            '8-ball-pool.html': '8-ball-pool.html',
+            'breakout.html': 'breakout.html',
+            'classic-snake.html': 'classic-snake.html',
+            'memory-match.html': 'memory-match.html',
+            'piano-tiles.html': 'piano-tiles.html',
+            'pipe-hopper.html': 'pipe-hopper.html',
+            'rail-runner-3d.html': 'rail-runner-3d.html',
+            'oddzone.html': 'oddzone.html',
+            'index.html': 'index.html'
+        };
+
+        // Rewrites a repo-relative game path to the exact on-disk casing.
+        function canonicalGamePath(pathOrUrl) {
+            const raw = String(pathOrUrl || '').trim();
+            if (!raw) return '';
+            if (/^(https?:|data:|blob:)/i.test(raw) || raw.startsWith('//')) return raw;
+
+            const [pathPart, ...rest] = raw.split('?');
+            const suffix = rest.length ? '?' + rest.join('?') : '';
+            const segments = pathPart.replace(/\\/g, '/').split('/').filter(Boolean);
+            const canonical = segments.map((segment, index) => {
+                const isLast = index === segments.length - 1;
+                const lower = segment.toLowerCase();
+                if (isLast && GAME_FILE_NAME_CASE[lower]) return GAME_FILE_NAME_CASE[lower];
+                return GAME_PATH_SEGMENT_CASE[lower] || lower;
+            });
+            return canonical.join('/') + suffix;
         }
 
         // Builds a same-origin URL for a game file. The catalog stores paths
@@ -6892,17 +6995,18 @@
             // Absolute URLs, data: and blob: are used as-is.
             if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
 
-            // Strip any leading "./" or "/" so the path is repo-root relative.
-            let cleaned = raw.replace(/^\.\//, '').replace(/^\/+/, '');
-            if (!cleaned) return '';
-
             // A protocol-relative URL ("//host/x") is a DIFFERENT origin, not a
             // local file, so it must never be rebased onto the app directory.
             if (raw.startsWith('//')) return raw;
 
+            // Strip any leading "./" or "/" so the path is repo-root relative,
+            // and fix the casing before anything is requested from the host.
+            let cleaned = canonicalGamePath(raw.replace(/^\.\//, '').replace(/^\/+/, ''));
+            if (!cleaned) return '';
+
             // Collapse an accidentally duplicated "games/games/..." prefix, so
             // editing a catalog path that way still resolves.
-            while (/^games\/games\//.test(cleaned)) cleaned = cleaned.slice(6);
+            while (/^games\/games\//i.test(cleaned)) cleaned = cleaned.slice(6);
 
             const base = getAppBasePath();
             return base + cleaned;
@@ -6967,7 +7071,9 @@
                 document.getElementById('oddzone-game-frame').classList.add('hidden');
                 document.getElementById('game-iframe').classList.remove('hidden');
                 document.getElementById('game-scoreboard').classList.add('hidden');
-                document.getElementById('game-iframe').src = game.url;
+                // Same re-basing as buildGameUrl(): a root-relative url here
+                // would escape the project directory on GitHub Pages.
+                document.getElementById('game-iframe').src = resolveGameUrl(game.url);
                 document.getElementById('game-arena-modal').classList.remove('hidden');
                 const overlay = document.getElementById('arena-tap-to-start-overlay');
                 if (overlay) overlay.classList.remove('hidden');
@@ -7664,7 +7770,7 @@
         function createSkyPatrolGame() {
             return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><style>
                 *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#07111b;color:#e8f4ff;font-family:system-ui,sans-serif}canvas{display:block;width:100%;height:100%;touch-action:none}.help{position:absolute;left:0;right:0;bottom:16px;text-align:center;color:#b8cada;font-size:12px;text-shadow:0 1px 4px #000;pointer-events:none}
-                <\/style></head><body><canvas id="field" aria-label="Sky Patrol arcade shooter"></canvas><div class="help">Move with A/D or arrow keys · Hold Space to fire · Touch and drag to steer</div><script>
+                <\/style></head><body><canvas id="field" aria-label="Sky Patrol arcade shooter"></canvas><div class="help">Move with A/D or arrow keys · Hold Space to fire · Touch and drag to steer</div><\/script><script>
                 (()=>{const canvas=document.getElementById('field'),ctx=canvas.getContext('2d');let width=0,height=0,scale=1,score=0,ended=false,shipX=.5,lastShot=0,lastSpawn=0,lastFrame=0;const keys=new Set(),shots=[],targets=[],stars=[];
                 function resize(){scale=Math.min(window.devicePixelRatio||1,2);width=innerWidth;height=innerHeight;canvas.width=Math.floor(width*scale);canvas.height=Math.floor(height*scale);ctx.setTransform(scale,0,0,scale,0,0);stars.length=0;for(let index=0;index<70;index++)stars.push({x:Math.random()*width,y:Math.random()*height,size:Math.random()*1.8+.4,speed:Math.random()*24+12})}window.addEventListener('resize',resize);resize();
                 function report(){parent.postMessage({type:'oddzone:score',score},'*')}function finish(){if(ended)return;ended=true;parent.postMessage({type:'oddzone:game-complete',score},'*')}
@@ -10122,6 +10228,18 @@
         window.checkGameFileAvailable = checkGameFileAvailable;
         window.showGameLoadError = showGameLoadError;
         window.launchGameModule = launchGameModule;
+
+        // matchmaking.js (an ES module) reads these off window: they are
+        // script-scoped here, so without the handles the duel screens lose the
+        // game titles and the "top up wallet" shortcut. The routing helpers are
+        // exposed as well so the catalog paths can be checked from the console.
+        window.GAME_CATALOG = GAME_CATALOG;
+        window.switchTab = switchTab;
+        window.openGameOptions = openGameOptions;
+        window.renderGameCards = renderGameCards;
+        window.buildGameUrl = buildGameUrl;
+        window.resolveGameUrl = resolveGameUrl;
+        window.assetUrl = assetUrl;
     </script>
 </body>
 </html>
