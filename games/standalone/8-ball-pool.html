@@ -36,6 +36,9 @@
   #toast.show{opacity:1;transform:translate(-50%,0)}
   .overlay{position:absolute;inset:0;border-radius:18px;display:flex;align-items:center;justify-content:center;
     background:rgba(8,12,10,.78);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);padding:14px;z-index:5}
+  /* The end overlay must sit above the side menu panel (.btns is z-index:10)
+     and the cue canvas, or on a narrow phone the menu can cover the buttons. */
+  #endOverlay{z-index:30;overscroll-behavior:contain}
   .overlay.hidden{display:none}
   #btnRetrySettlement.hidden{display:none}
   .card{width:min(420px,100%);max-height:96%;overflow:auto;background:linear-gradient(180deg,#1f2e25,#141d18);border:1px solid rgba(226,184,88,.35);border-radius:20px;padding:22px 24px;text-align:left;box-shadow:0 20px 50px rgba(0,0,0,.6)}
@@ -45,7 +48,13 @@
   .rules li{padding-left:18px;position:relative;color:#dfe6dc}
   .rules li::before{content:"";position:absolute;left:0;top:.5em;width:7px;height:7px;border-radius:50%;background:var(--brass)}
   .btn{appearance:none;border:0;cursor:pointer;font:inherit;font-weight:700;border-radius:12px;padding:12px 20px;
-    background:linear-gradient(180deg,#f0cb74,#cf9f3d);color:#2a1d05;box-shadow:0 3px 0 #8f6a1e,0 8px 18px rgba(0,0,0,.35);transition:transform .08s,box-shadow .08s}
+    background:linear-gradient(180deg,#f0cb74,#cf9f3d);color:#2a1d05;box-shadow:0 3px 0 #8f6a1e,0 8px 18px rgba(0,0,0,.35);transition:transform .08s,box-shadow .08s;
+    /* The play surface captures pointerdown for aiming and the document sets
+       touch-action:none. Without these the browser can swallow or double the
+       tap, so the overlay buttons feel dead on iPhone. */
+    touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;
+    position:relative;z-index:1;min-height:44px}
+  .btn[disabled]{opacity:.6;cursor:default;pointer-events:auto}
   .btn:active{transform:translateY(2px);box-shadow:0 1px 0 #8f6a1e,0 4px 10px rgba(0,0,0,.35)}
   .btn.hidden{display:none}
   .btn.wide{width:100%;font-size:16px;margin-bottom:8px}
@@ -1444,7 +1453,7 @@ async function endPoolTurn(reason){
     const back=$('btnBack');
     if(back){
       back.textContent='Back to Lobby';
-      back.onclick=()=>window.parent.postMessage(lobbyStatus,'*');
+      back.onclick=()=>leavePoolToLobby(lobbyStatus);
     }
     endOverlay.classList.remove('hidden');
     try{window.parent.postMessage({type:'oddzone:pool-turn-saved',challengeId:poolOwnChallengeId},'*');}catch(e){}
@@ -1460,6 +1469,115 @@ async function endPoolTurn(reason){
     $('btnRetrySettlement').textContent='Retry turn handoff';
     $('btnRetrySettlement').onclick=()=>void endPoolTurn(reason);
     endOverlay.classList.remove('hidden');
+  }
+}
+
+/* ── TURN SAVED screen: user actions ─────────────────────────────────────── */
+
+// True while this module is inside the OddZone arena rather than opened on its
+// own URL (e.g. the file dragged into Safari, or a direct link).
+function inParentFrame(){
+  try{ return !!(window.parent && window.parent !== window); }catch(e){ return false; }
+}
+
+function postToParent(payload){
+  if(!inParentFrame()) return false;
+  try{ window.parent.postMessage(payload,'*'); return true; }
+  catch(e){ return false; }
+}
+
+// Leaves the arena and returns to the lobby. Sends the close command AND an
+// explicit lobby request, because the parent cleans up different state for
+// each, then falls back to our own screen when nobody is listening.
+function leavePoolToLobby(status){
+  const challengeId=String(status&&status.challengeId||poolOwnChallengeId||SOLO_MATCH_ID||'');
+  const delivered=postToParent({type:'oddzone:close',challengeId,reason:'pool-turn-saved'});
+  postToParent(Object.assign({challengeId},status||{}, {type:'oddzone:pool-turn-sent'}));
+  if(!delivered) showStandaloneLobbyNotice(challengeId);
+  return delivered;
+}
+
+// Shown when the module is opened outside the arena and so has no lobby to
+// return to. Better than a dead button that appears to do nothing.
+function showStandaloneLobbyNotice(challengeId){
+  endOverlay.classList.add('hidden');
+  $('endTitle').textContent='Turn Saved';
+  $('endScore').textContent='TURN SAVED';
+  $('endRating').textContent='Open 8-Ball Pool from the OddZone app to check this match and take your next turn.';
+  $('endTable').innerHTML='<tr><td>Match</td><td>'+String(challengeId||'—')+'</td></tr>';
+  const status=$('saveStatus');
+  if(status)status.textContent='This page was opened directly. The lobby lives in the OddZone app.';
+  asyncRunBanner('Return to the OddZone app to continue this match.');
+  $('btnCheckStatus').classList.add('hidden');
+  const back=$('btnBack');
+  if(back){ back.textContent='Close'; back.onclick=()=>{ try{ window.close(); }catch(e){} }; }
+  endOverlay.classList.remove('hidden');
+}
+
+// Reads the live pool_matches row so the player gets a real answer instead of
+// a silent no-op. Every path ends in visible text: loading, settled result, or
+// an explicit error with a retry.
+async function checkPoolGameStatus(){
+  const btn=$('btnCheckStatus');
+  const status=$('saveStatus');
+  const originalLabel=btn?btn.textContent:'Check Game Status';
+  if(btn){ btn.disabled=true; btn.textContent='Checking…'; }
+  if(status) status.textContent='Checking the match status…';
+
+  const finish=(message,{title,rating}={})=>{
+    if(btn){ btn.disabled=false; btn.textContent=originalLabel; }
+    if(status) status.textContent=message;
+    if(title) $('endTitle').textContent=title;
+    if(rating) $('endRating').textContent=rating;
+  };
+
+  try{
+    const challengeId=String(poolOwnChallengeId||SOLO_MATCH_ID||'');
+    const isUuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(challengeId);
+    if(!challengeId) throw new Error('This match has no reference to check.');
+    const sb=getSB();
+    if(!sb) throw new Error('Cannot reach the server. Check your connection and retry.');
+
+    // The challenge id may be either the pool_matches row id or one of the two
+    // per-seat stake_challenges ids, so all three are matched. The seat columns
+    // are uuid, and PostgREST rejects a malformed uuid cast, so only filter on
+    // them when the id really is one.
+    let filter='challenge_id.eq.'+challengeId;
+    if(isUuid) filter+=',player_a_challenge_id.eq.'+challengeId+',player_b_challenge_id.eq.'+challengeId;
+
+    const {data,error}=await sb
+      .from('pool_matches')
+      .select('challenge_id,player_a_id,player_b_id,current_turn,status,pending_winner_seat,updated_at')
+      .or(filter)
+      .order('updated_at',{ascending:false})
+      .limit(1)
+      .maybeSingle();
+    if(error) throw error;
+    if(!data) throw new Error('That match could not be found. It may have expired.');
+
+    const opponentJoined=!!data.player_b_id;
+    const mySeat=TURN_SEAT;
+    const myTurn=Number(data.current_turn)===mySeat;
+    const matchStatus=String(data.status||'').toLowerCase();
+    const decided=matchStatus==='completed'||data.pending_winner_seat!==null&&data.pending_winner_seat!==undefined;
+
+    if(decided){
+      finish('This match already has a result. Return to the lobby to see it in My Games.','Match Finished','Your turn is no longer needed — this match has been settled.');
+      return;
+    }
+    if(!opponentJoined){
+      finish('Nobody has accepted this challenge yet. Keep this page open or check again later.','Searching for Opponent','Your turn is saved. A rival must accept the challenge before the match can continue.');
+      return;
+    }
+    if(myTurn){
+      finish('It is your turn now. Reopen the match from the lobby to play.','Your Turn!',"Your rival has played. Leave the arena and reopen Pool to take your shot.");
+      return;
+    }
+    finish('Your rival has not played yet. Check again in a moment.','Still Waiting','Your turn is still saved. You will be able to play once your rival takes their shot.');
+  }catch(error){
+    console.error('[8-ball] status check failed:',error);
+    const reason=String(error&&error.message||'unknown error').replace(/\.+$/,'');
+    finish('Could not check the status: '+reason+'. Tap again to retry.','Status Unavailable');
   }
 }
 
@@ -2725,7 +2843,7 @@ document.addEventListener('click',e=>{if(e.target.closest('button')){ensureAudio
 $('btnStart').addEventListener('click',()=>{if(isLiveMatchRoom){toast('This is a live match — wait for your rival',1800);return;}mode='solo';stopAsyncPoll();setNames();ensureAudio();newGame();});
 $('btnAgain').addEventListener('click',()=>{ensureAudio();newGame();});
 $('btnNew').addEventListener('click',()=>{ensureAudio();newGame();});
-$('btnCheckStatus').addEventListener('click',()=>window.parent.postMessage({type:'oddzone:pool-check-status',challengeId:poolOwnChallengeId},'*'));
+$('btnCheckStatus').addEventListener('click',()=>{void checkPoolGameStatus();});
 $('skipReplay').addEventListener('click',finishPoolReplay);
 
 /* ---- async "Take Turns" UI ---- */

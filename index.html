@@ -5834,8 +5834,19 @@
 
         function checkPoolGameStatusFromLobby() {
             const challengeId = poolStatusChallengeId;
+            if (!challengeId) {
+                setStakeErr('No saved 8-Ball match to check yet. Start or join a match first.');
+                return;
+            }
             document.getElementById('matchmaking-modal')?.classList.add('hidden');
-            if (challengeId) void openPoolMatchmaking(challengeId);
+            void openPoolMatchmaking(challengeId).catch(error => {
+                console.error('Could not check the pool match status:', error);
+                showPoolLobbyStatus(
+                    'Pool match unavailable',
+                    error?.message || 'Could not reach the server. Tap Check Game Status to retry.',
+                    challengeId
+                );
+            });
         }
 
         async function openPoolMatchmaking(challengeId = null) {
@@ -7859,6 +7870,23 @@
             document.getElementById('oddzone-game-frame').src = '';
             document.getElementById('oddzone-game-frame').classList.add('hidden');
             document.getElementById('external-game-container').classList.remove('hidden');
+            // Hide the matchmaking modal as well: leaving the arena from the
+            // TURN SAVED screen must land on the LOBBY, not on a modal that is
+            // still sitting underneath the hidden arena. The caller reopens it
+            // when there is match status worth showing.
+            document.getElementById('matchmaking-modal')?.classList.add('hidden');
+        }
+
+        // "Back to Lobby" from inside a game. The postMessage handler in this
+        // file is the normal path; this helper is the belt-and-braces version
+        // used when the frame is torn down before the message is dispatched.
+        function exitArenaToLobby() {
+            closeGameArena();
+            try {
+                switchTab('home');
+            } catch (error) {
+                console.warn('[OddZone] could not switch to the lobby tab:', error);
+            }
         }
 
         async function logoutUser() {
@@ -7882,8 +7910,31 @@
                 clearInterval(matchTimerInterval);
                 clearTimeout(matchFinishFallback);
                 activeTimedMatch = null;
+                const requestedId = String(event.data.challengeId || poolStatusChallengeId || '');
                 closeGameArena();
-                void openPoolMatchmaking(String(event.data.challengeId || ''));
+                const modal = document.getElementById('matchmaking-modal');
+                if (modal) modal.classList.remove('hidden');
+                document.getElementById('matchmaking-done-btn')?.classList.remove('hidden');
+                const checkBtn = document.getElementById('matchmaking-check-pool-btn');
+                if (checkBtn) {
+                    checkBtn.classList.remove('hidden');
+                    checkBtn.disabled = true;
+                    checkBtn.textContent = 'Checking…';
+                }
+                showPoolLobbyStatus('Checking match status…', 'Looking up your saved 8-Ball table…', requestedId);
+                Promise.resolve(openPoolMatchmaking(requestedId))
+                    .catch(error => {
+                        console.error('[OddZone] pool status check failed:', error);
+                        setStakeErr(error?.message || 'Could not check the match status. Tap Check Game Status to retry.');
+                    })
+                    .finally(() => {
+                        const btn = document.getElementById('matchmaking-check-pool-btn');
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.textContent = 'Check Game Status';
+                            btn.classList.toggle('hidden', !poolStatusChallengeId);
+                        }
+                    });
                 return;
             }
 
@@ -7946,7 +7997,7 @@
             }
 
             if (event.data.type === 'oddzone:close') {
-                closeGameArena();
+                exitArenaToLobby();
                 return;
             }
             if (!activeTimedMatch) {
