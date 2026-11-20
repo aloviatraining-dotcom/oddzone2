@@ -1661,21 +1661,28 @@ function showStandaloneLobbyNotice(challengeId){
 }
 
 // Reads the live pool_matches row so the player gets a real answer instead of
-// a silent no-op. Every path ends in visible text: loading, settled result, or
-// an explicit error with a retry.
+// a silent no-op. EVERY path ends in visible text AND releases the button:
+// loading -> a settled result, "still waiting" with the rival + turn number, or
+// an explicit error with a retry. The button can no longer be left disabled on
+// "Checking…": a hard timeout races the read, and the release is idempotent.
 async function checkPoolGameStatus(){
   const btn=$('btnCheckStatus');
   const status=$('saveStatus');
-  const originalLabel=btn?btn.textContent:'Check Game Status';
-  if(btn){ btn.disabled=true; btn.textContent='Checking…'; }
-  if(status) status.textContent='Checking the match status…';
-
-  const finish=(message,{title,rating}={})=>{
+  if(btn&&btn.disabled)return;          // already checking
+  const originalLabel='Check Game Status';
+  let released=false;
+  const release=(message,{title,rating}={})=>{
+    released=true;
     if(btn){ btn.disabled=false; btn.textContent=originalLabel; }
     if(status) status.textContent=message;
     if(title) $('endTitle').textContent=title;
     if(rating) $('endRating').textContent=rating;
   };
+  if(btn){ btn.disabled=true; btn.textContent='Checking…'; }
+  if(status) status.textContent='Checking the match status…';
+
+  // A read that never settles must not hold the button hostage.
+  const timeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error('The status check timed out. Tap again to retry.')),12000));
 
   try{
     const challengeId=String(poolOwnChallengeId||SOLO_MATCH_ID||'');
@@ -1695,36 +1702,70 @@ async function checkPoolGameStatus(){
     // environment (rows are keyed by `id`/`code`), so the lookup is a
     // `select('*')` with a per-column fallback instead of an `.or()` that
     // references a column that may not exist.
-    const rows=await readPoolMatchRows(sb,challengeId);
+    const rows=await Promise.race([readPoolMatchRows(sb,challengeId),timeout]);
     const data=rows&&rows.length?rows[0]:null;
     if(!data) throw new Error('That match could not be found. It may have expired.');
 
     const opponentJoined=!!data.player_b_id;
     const mySeat=TURN_SEAT;
     const myTurn=Number(data.current_turn)===mySeat;
+    const turnNumber=Number(data.turn_number??data.turn??0)||0;
     const matchStatus=String(data.status||'').toLowerCase();
     const decided=matchStatus==='completed'
       ||(data.pending_winner_seat!==null&&data.pending_winner_seat!==undefined)
       ||!!data.winner_id;
 
     if(decided){
-      finish('This match already has a result. Return to the lobby to see it in My Games.','Match Finished','Your turn is no longer needed — this match has been settled.');
+      release('Result confirmed — this match has a final result. Return to the lobby to see it in My Games.','Match Finished','Your turn is no longer needed — this match has been settled.');
       return;
     }
     if(!opponentJoined){
-      finish('Nobody has accepted this challenge yet. Keep this page open or check again later.','Searching for Opponent','Your turn is saved. A rival must accept the challenge before the match can continue.');
+      release('Checked — still waiting for an opponent to accept (turn '+turnNumber+').','Searching for Opponent','Your turn is saved. A rival must accept the challenge before the match can continue.');
       return;
     }
+
+    // The rival exists: read their name so the confirmation names them.
+    let rivalName='your opponent';
+    try{
+      const rivalId=mySeat===0?data.player_b_id:data.player_a_id;
+      if(rivalId){
+        const{data:profile}=await sb.from('public_profiles').select('username').eq('user_id',rivalId).maybeSingle();
+        if(profile&&profile.username)rivalName=profile.username;
+      }
+    }catch(e){ /* a missing profile must not fail the check */ }
+
     if(myTurn){
-      finish('It is your turn now. Reopen the match from the lobby to play.','Your Turn!',"Your rival has played. Leave the arena and reopen Pool to take your shot.");
+      release('Checked — it is your turn now (turn '+turnNumber+'). Take your shot below or reopen the match from the lobby.','Your Turn!','Your rival '+rivalName+' has played. The table is yours for turn '+turnNumber+'.');
+      // The table itself is already on this device: go back to aiming so the
+      // player can play immediately instead of being told to leave.
+      resumeSavedTurnAfterCheck();
       return;
     }
-    finish('Your rival has not played yet. Check again in a moment.','Still Waiting','Your turn is still saved. You will be able to play once your rival takes their shot.');
+    release('Checked — still waiting for '+rivalName+' (turn '+turnNumber+').','Still Waiting','It is turn '+turnNumber+' and the table is saved. You will play when '+rivalName+' finishes.');
   }catch(error){
     console.error('[8-ball] status check failed:',error);
+    if(released)return;
     const reason=String(error&&error.message||'unknown error').replace(/\.+$/,'');
-    finish('Could not check the status: '+reason+'. Tap again to retry.','Status Unavailable');
+    release('Could not check the status: '+reason+'. Tap again to retry.','Status Unavailable');
   }
+}
+
+/* The player tapped "Check Game Status" and the server says the turn is
+ * theirs. The saved table is already loaded in this frame, so put the table
+ * back in play (instead of making them leave the arena and reopen Pool). */
+function resumeSavedTurnAfterCheck(){
+  if(!TURN_BASED)return;
+  if(turnSaveInProgress)return;
+  try{
+    endOverlay.classList.add('hidden');
+    $('btnCheckStatus')?.classList.add('hidden');
+    state='aim';cur=TURN_SEAT;inHand=false;
+    turnExpiryPending=false;terminalTurnSaved=false;
+    updateHud();
+    turnBasedNames();
+    armShotTimer(true);
+    asyncRunBanner('Your Turn! Take your shot');
+  }catch(e){ console.warn('[8-ball] could not resume the saved turn:',e); }
 }
 
 /* Read the pool_matches row(s) for a challenge id WITHOUT assuming any
@@ -1763,7 +1804,12 @@ async function finishPoolTurn(winnerSeat,reason){
   const retry=$('btnRetrySettlement');
   retry.disabled=true;
   retry.textContent='Confirming…';
-  retry.onclick=()=>void finishPoolTurn(winnerSeat,reason);
+  retry.onclick=()=>{
+    if(turnSaveInProgress)return;
+    retry.disabled=true;
+    retry.textContent='Confirming…';
+    void finishPoolTurn(winnerSeat,reason);
+  };
   endOverlay.classList.remove('hidden');
   try{
     let settlement=null;
@@ -1820,12 +1866,23 @@ async function finishPoolTurn(winnerSeat,reason){
     }
   }catch(error){
     console.error('[8-ball] final pool result could not be confirmed:',error);
-    $('endTitle').textContent='Result Pending';
-    $('saveStatus').textContent='The final result could not be confirmed'+(error&&error.message?': '+error.message:'')+'. Retry when you are back online.';
+    // Show the outcome the TABLE already decided, but never as a confirmed
+    // result: the board must say pending until the server agrees.
+    $('endTitle').textContent=localWinner?'Result Pending — WIN':'Result Pending — LOSS';
+    $('endScore').textContent=localWinner?'WIN':'LOSS';
+    $('saveStatus').textContent='The final result could not be confirmed'+(error&&error.message?': '+error.message:'')+'. Retry to confirm the official result.';
     retry.classList.remove('hidden');
     retry.disabled=false;
     retry.textContent='Retry final result';
-    retry.onclick=()=>void finishPoolTurn(winnerSeat,reason);
+    // Re-arm the confirmation: without this, a failed attempt left
+    // terminalTurnSaved set and the retry returned immediately, so the board
+    // could never leave "Result Pending".
+    retry.onclick=()=>{
+      terminalTurnSaved=false;
+      retry.disabled=true;
+      retry.textContent='Confirming…';
+      void finishPoolTurn(winnerSeat,reason).catch(e=>console.error('[8-ball] retry failed:',e));
+    };
   }
 }
 
@@ -1897,6 +1954,9 @@ async function submitSoloFinalRun(finalScore,outcome){
       retryButton.classList.remove('hidden');
       retryButton.disabled=false;
       retryButton.textContent='Retry result submission';
+      // Wire the retry: every other path that reveals this button also binds
+      // it, and without a handler the button did nothing at all.
+      retryButton.onclick=()=>void submitSoloFinalRun(finalScore,outcome);
     }
   }finally{
     soloSubmissionInProgress=false;
@@ -2218,6 +2278,7 @@ async function submitRun(outcome){
       retryButton.classList.remove('hidden');
       retryButton.disabled=false;
       retryButton.textContent='Retry score submission';
+      retryButton.onclick=()=>void submitRun(run);
     }
     endOverlay.classList.remove('hidden');
     return false;
