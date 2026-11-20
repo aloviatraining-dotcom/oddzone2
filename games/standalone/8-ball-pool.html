@@ -680,7 +680,7 @@ async function expireShotTimer(){
   if(!TURN_BASED||cur!==TURN_SEAT)return;
   shotExpiryBusy=true;
   try{
-    toast('30 seconds up — turn passed',2400);
+    toast('⏱ No shot — saving your table and passing the turn…',3000);
     // A half-aimed cue or a ball being placed belongs to the saved table too.
     if(strike&&state==='striking'){strike=null;state='aim';}
     if(!firstShotFired&&isTimedRun()){
@@ -1601,7 +1601,14 @@ async function endPoolTurn(reason){
       back.textContent='Back to Lobby';
       back.onclick=()=>leavePoolToLobby(lobbyStatus);
     }
-    endOverlay.classList.remove('hidden');
+    // Rack-handoff animation: flash the canvas to signal the save.
+    (function flashCanvas(){
+      const cv=document.getElementById('game');
+      if(!cv)return;
+      cv.style.transition='opacity .28s ease-out';cv.style.opacity='0';
+      setTimeout(()=>{cv.style.opacity='1';cv.style.transition='opacity .4s ease-in';},320);
+    })();
+    setTimeout(()=>endOverlay.classList.remove('hidden'),200);
     try{window.parent.postMessage({type:'oddzone:pool-turn-saved',challengeId:poolOwnChallengeId},'*');}catch(e){}
   }catch(error){
     console.error('[8-ball] could not save pool turn:',error);

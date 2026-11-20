@@ -9174,7 +9174,10 @@
         async function syncPoolTurnBaseline(matchId) {
             const key = String(matchId || '');
             if (!key) return 0;
-            if (!poolTurnBaselineByMatch[key]) poolTurnBaselineByMatch[key] = Date.now();
+            // Do NOT set Date.now() as a fake baseline here.
+            // If we have no anchor yet, poolTurnSecondsLeft() already returns
+            // the full POOL_TURN_LIMIT_MS as a placeholder -- that is safer
+            // than pinning it to the wrong time and showing 0:00 forever.
             const client = getSupabaseAuthClient();
             if (!client || !activeUser?.id || activeUser.isGuest) return poolTurnSecondsLeft(key);
             try {
@@ -9395,7 +9398,8 @@
             textEl.textContent = 'Your Turn! Your 8-Ball Pool opponent has finished their turn. ';
             if (clockEl) textEl.append(clockEl);
             if (clockEl) {
-                clockEl.textContent = formatPoolCountdown(poolTurnSecondsLeft(toast.dataset.matchId));
+                // Show a neutral placeholder until the server baseline arrives.
+            clockEl.textContent = poolTurnBaselineByMatch[toast.dataset.matchId] ? formatPoolCountdown(poolTurnSecondsLeft(toast.dataset.matchId)) : '…';
                 clockEl.style.cssText = 'display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:rgba(52,211,153,.18);color:#a7f3d0;font:900 12px/1.5 ui-monospace,monospace;letter-spacing:.02em;vertical-align:baseline';
             }
             toast.classList.remove('hidden');
