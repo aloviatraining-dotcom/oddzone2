@@ -9216,10 +9216,10 @@
             if (!clock) return;
             stopPoolTurnCountdown();
             const paint = () => {
-                if (!toast.classList.contains('hidden')) {
-                    toast.dataset.turnSeconds = String(poolTurnSecondsLeft(toast.dataset.matchId));
-                }
-                const seconds = Number(toast.dataset.turnSeconds || 0);
+                // Always recalculate from the live baseline; never use a stale
+                // cached value — that is what causes the frozen 0:00 display.
+                const seconds = poolTurnSecondsLeft(toast.dataset.matchId);
+                toast.dataset.turnSeconds = String(seconds);
                 clock.textContent = formatPoolCountdown(seconds);
                 clock.style.color = seconds <= 60 ? '#f87171' : seconds <= 120 ? '#fbbf24' : '#a7f3d0';
             };
@@ -9357,6 +9357,19 @@
                 button.addEventListener('click', event => {
                     event.stopPropagation();
                     if (isSwipeGuardActive(toast)) return;
+                    // Cancel the auto-hide so it doesn't fire while the match is opening.
+                    clearTimeout(Number(toast.dataset.timer) || 0);
+                    // Distinct Web Audio click sound (no external file — inline synthesis).
+                    try {
+                        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                        const o = ctx.createOscillator(); const g = ctx.createGain();
+                        o.type = 'sine'; o.frequency.setValueAtTime(880, ctx.currentTime);
+                        o.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.08);
+                        g.gain.setValueAtTime(0.28, ctx.currentTime);
+                        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+                        o.connect(g); g.connect(ctx.destination);
+                        o.start(); o.stop(ctx.currentTime + 0.14);
+                    } catch (e) { /* audio context not available */ }
                     openPoolTurnToast(toast);
                 });
                 // A small clock pill inside the banner: the player can see how
@@ -9393,14 +9406,17 @@
             toast.style.transform = 'translate3d(0,0,0)';
             toast.style.opacity = '1';
             clearTimeout(Number(toast.dataset.timer) || 0);
-            // The turn banner no longer vanishes after 9 s: the player needs it
-            // (and its clock) until they play or swipe it away by choice.
-            toast.dataset.timer = '';
+            // Auto-hide after 5 s — the banner stays readable but won't block
+            // the UI permanently. Swipe-up dismisses it instantly at any point.
+            toast.dataset.timer = String(setTimeout(() => hidePoolTurnToast(toast), 5000));
             startPoolTurnCountdown();
-            // Pull the authoritative start time, then re-paint with it.
+            // Pull the authoritative start time, then re-paint with it and
+            // re-arm the auto-hide based on the real server clock.
             void syncPoolTurnBaseline(toast.dataset.matchId).then(() => {
                 if (!toast.classList.contains('hidden') && toast.dataset.matchId === String(notification.match_id || toast.dataset.matchId || '')) {
                     startPoolTurnCountdown();
+                    clearTimeout(Number(toast.dataset.timer) || 0);
+                    toast.dataset.timer = String(setTimeout(() => hidePoolTurnToast(toast), 5000));
                 }
             });
         }
