@@ -59,6 +59,9 @@ export default class RunningScene extends Scene {
 
   private animationFinishedHandler: (() => void) | null = null;
 
+  // True once this rack's result has been posted to the OddZone host.
+  private oddzoneReported = false;
+
   private barrelObject = new Object3D();
 
   private boxObject = new Object3D();
@@ -524,10 +527,14 @@ export default class RunningScene extends Scene {
   // previously reachable only through the in-game quit/retry buttons. Exposing
   // it here is what makes __oddzoneStart() actually start a live run.
   startOddZoneMatch() {
+    this.oddzoneReported = false;
     this.restartGame();
   }
 
   endOddZoneMatch() {
+    // The arena's clock ran out (or the match was closed). Publish whatever
+    // was earned -- a run that ends because the host stopped it still counts.
+    this.publishOddZoneResult('time-up');
     this.isGameOver = true;
     this.isGamePaused = true;
     this.isPlayerHeadStart = false;
@@ -579,15 +586,6 @@ export default class RunningScene extends Scene {
     this.isGameOver = true;
     this.speed = 0;
     (document.querySelector('.pause-button') as HTMLInputElement).style.display = 'none';
-    setTimeout(() => {
-      this.clock.stop();
-      (document.getElementById('game-over-modal') as HTMLInputElement).style.display = 'block';
-      (document.querySelector('#current-score') as HTMLInputElement).innerHTML = this.scores.toString();
-      (document.querySelector('#current-coins') as HTMLInputElement).innerHTML = this.coins.toString();
-
-      this.stumbleAnimation.reset();
-      this.player.rotation.x = (90 * (Math.PI / 180));
-    }, 3000);
     this.stumbleAnimation.reset();
     this.stumbleAnimation.setLoop(1, 1);
     this.stumbleAnimation.clampWhenFinished = true;
@@ -600,10 +598,53 @@ export default class RunningScene extends Scene {
     (document.querySelector('.disable-touch') as HTMLInputElement).style.display = 'block';
     this.saveCoins();
     this.saveHighScore();
+
+    // REPORT THE CRASH IMMEDIATELY.
+    //
+    // The score used to be published only from the secondary timeout below,
+    // three seconds after the hit. The arena's __oddzoneEnd() freezes the game
+    // (isGameOver=true) and cancels that timer, and the module's own
+    // "current-score" field is only refreshed inside it -- so dying posted
+    // nothing, and both the standalone score and the duel settled as if the
+    // run had not ended. Report first, then show the card.
+    this.publishOddZoneResult('crash');
+
+    setTimeout(() => {
+      this.clock.stop();
+      this.showGameOverCard();
+    }, 3000);
+  }
+
+  /** Write the final numbers into the Game Over card. */
+  private showGameOverCard() {
+    (document.getElementById('game-over-modal') as HTMLInputElement).style.display = 'block';
+    (document.querySelector('#current-score') as HTMLInputElement).innerHTML = this.scores.toString();
+    (document.querySelector('#current-coins') as HTMLInputElement).innerHTML = this.coins.toString();
+    this.stumbleAnimation.reset();
+    this.player.rotation.x = (90 * (Math.PI / 180));
+  }
+
+  /**
+   * Tell the OddZone host the run is over, with its final score.
+   * Idempotent per rack: `startOddZoneMatch()` clears the flag, so one crash
+   * reports once even though endOddZoneMatch() may follow it.
+   */
+  private publishOddZoneResult(reason: string) {
+    if (this.oddzoneReported) return;
+    this.oddzoneReported = true;
+    try {
+      window.parent.postMessage({ type: 'oddzone:score', score: this.scores }, '*');
+      window.parent.postMessage({
+        type: 'oddzone:game-complete',
+        score: this.scores,
+        reason,
+      }, '*');
+    } catch (error) { /* opened standalone: nothing to tell */ }
   }
 
   private restartGame() {
     (document.getElementById('game-over-modal') as HTMLInputElement).style.display = 'none';
+    this.oddzoneReported = false;
     // Clear any hop/slide left over from the lost run, so the new run starts
     // on the ground with both actions available.
     clearTimeout(this.sliderTimeout);

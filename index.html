@@ -191,6 +191,24 @@
         }
         #top-nav-bar { padding-top: max(0.75rem, env(safe-area-inset-top)); }
         #bottom-nav { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
+        /* The arena header sits flush under the phone's status/battery bar, so
+           the X (exit) button was cramped against the very top edge of the
+           screen and awkward to hit. Push the header below the notch/status
+           area and give the X its own breathing room (and a 44px tap target). */
+        #game-arena-header {
+            padding-top: calc(max(0.5rem, env(safe-area-inset-top, 0px)) + 10px);
+            padding-bottom: 0.75rem;
+        }
+        #arena-exit-btn {
+            width: 2.5rem;
+            height: 2.5rem;
+            margin-top: 6px;
+            flex: 0 0 auto;
+        }
+        @media (max-width: 430px) {
+            #game-arena-header { padding-top: calc(env(safe-area-inset-top, 0px) + 16px); }
+            #arena-exit-btn { margin-top: 8px; }
+        }
         .game-filter-chip.active { background: #7c4dff; color: #fff; border-color: transparent; }
         #app-container { background: #090610; }
         #top-nav-bar { min-height: 68px; }
@@ -1115,7 +1133,7 @@
 
         <!-- GAME ARENA IFRAME MODAL -->
         <div id="game-arena-modal" class="absolute inset-0 bg-darkBg z-50 flex flex-col hidden">
-            <div class="bg-cardBg px-4 py-3 border-b border-white/10 flex justify-between items-center shrink-0">
+            <div id="game-arena-header" class="bg-cardBg px-4 py-3 border-b border-white/10 flex justify-between items-center shrink-0">
                 <div class="flex items-center space-x-2">
                     <span id="arena-game-title" class="font-bold text-sm">Game Title</span>
                     <span id="arena-mode-badge" class="text-[10px] bg-accentGreen/10 text-accentGreen px-2 py-0.5 rounded font-bold">1v1 Battle</span>
@@ -1127,7 +1145,7 @@
                     <button type="button" id="arena-pause-btn" onclick="toggleInGamePause()" class="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-slate-300 hover:bg-white/10 transition" aria-label="Pause game">
                         <i id="arena-pause-icon" class="fa-solid fa-pause text-xs"></i>
                     </button>
-                    <button type="button" onclick="handleArenaCloseClick()" class="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-slate-300 hover:bg-white/10 transition" aria-label="Exit game">
+                    <button type="button" id="arena-exit-btn" onclick="handleArenaCloseClick()" class="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-slate-300 hover:bg-white/10 transition" aria-label="Exit game">
                         <i class="fa-solid fa-xmark"></i>
                     </button>
                 </div>
@@ -8485,18 +8503,35 @@
         let poolTurnNotificationsChannel = null;
 
         // Hide the pool-turn banner immediately, whatever animation is running.
+        //
+        // The banner is anchored with `left:50%` and centred by its OWN
+        // translateX(-50%). Every transform below therefore has to keep that
+        // -50% X component and vary ONLY the Y component — otherwise the
+        // element jumps sideways the moment a swipe starts. An upward exit is
+        // expressed in pixels derived from the banner's measured height, not in
+        // a percentage, so it clears the top of the screen regardless of how
+        // tall the wrapped text made the card.
+        function poolToastBaseTransform() {
+            return 'translate3d(0, 0, 0)';
+        }
+
         function hidePoolTurnToast(toast = document.getElementById('pool-turn-toast')) {
             if (!toast) return;
             clearTimeout(Number(toast.dataset.timer) || 0);
             swallowNextClick(toast);
-            toast.style.transition = 'transform .2s cubic-bezier(.4,0,1,1), opacity .2s ease-in';
-            toast.style.transform = 'translate3d(-50%,-130%,0)';
+            // Travel at least its own height plus its top offset, so the card is
+            // fully gone rather than peeking back in.
+            const height = toast.offsetHeight || 72;
+            const topOffset = parseFloat(getComputedStyle(toast).top) || 12;
+            const lift = Math.ceil(height + topOffset + 24);
+            toast.style.transition = 'transform .24s cubic-bezier(.4,0,1,1), opacity .24s ease-in';
+            toast.style.transform = `translate3d(0, -${lift}px, 0)`;
             toast.style.opacity = '0';
             setTimeout(() => {
                 toast.classList.add('hidden');
                 toast.style.transform = '';
                 toast.style.opacity = '';
-            }, 210);
+            }, 250);
         }
 
         // A dismissal ends with a click event; that click must not also open
@@ -8509,22 +8544,29 @@
             return Date.now() - at < 600;
         }
 
-        // The shared notification style. The banner sits in the browser's
-        // VISUAL viewport (position:fixed + dvh units), keeps away from the
-        // right edge on narrow phones, and lets long text wrap instead of
-        // being clipped behind the button.
+        // The shared notification style. The banner is laid out with LEFT and
+        // RIGHT INSETS rather than a calculated width:
+        //   - `width: calc(100vw - 24px)` overflowed on iOS, where 100vw can be
+        //     wider than the visual viewport — the right edge went off-screen
+        //     and "…has finished their turn." was cut off.
+        //   - pinning both edges and centring with margin:auto makes the card
+        //     exactly as wide as the space between them, on every viewport,
+        //     with no transform maths involved.
+        // box-sizing/touch-action/text-wrapping are all set here so the card
+        // can never clip its own copy behind the button.
         function applyToastStyles(toast) {
-            const narrow = window.matchMedia && window.matchMedia('(max-width: 380px)').matches;
+            const narrow = window.matchMedia && window.matchMedia('(max-width: 430px)').matches;
             toast.style.cssText = [
                 'position:fixed',
                 'z-index:120',
                 'top:calc(env(safe-area-inset-top, 0px) + 12px)',
-                'left:50%',
-                'right:auto',
-                'transform:translate3d(-50%,0,0)',
-                'width:calc(100vw - 24px)',
+                'left:12px',
+                'right:12px',
+                'width:auto',
                 'max-width:420px',
+                'margin:0 auto',
                 'box-sizing:border-box',
+                'transform:translate3d(0,0,0)',
                 'padding:12px 14px',
                 'border:1px solid rgba(52,211,153,.5)',
                 'border-radius:16px',
@@ -8595,7 +8637,7 @@
             // start transform before the transition back to rest.
             void toast.offsetWidth;
             toast.style.transition = 'transform .2s ease-out, opacity .2s ease-out';
-            toast.style.transform = 'translate3d(-50%,0,0)';
+            toast.style.transform = 'translate3d(0,0,0)';
             toast.style.opacity = '1';
             clearTimeout(Number(toast.dataset.timer) || 0);
             toast.dataset.timer = String(setTimeout(() => hidePoolTurnToast(toast), 9000));
@@ -8639,7 +8681,7 @@
             toast.classList.remove('hidden');
             void toast.offsetWidth;
             toast.style.transition = 'transform .2s ease-out, opacity .2s ease-out';
-            toast.style.transform = 'translate3d(-50%,0,0)';
+            toast.style.transform = 'translate3d(0,0,0)';
             toast.style.opacity = '1';
             clearTimeout(Number(toast.dataset.timer) || 0);
             // A deadline warning is NOT dismissed on a timer: it stays until
@@ -8679,11 +8721,14 @@
                 if (startY === null) return;
                 const dy = y - startY;
                 const dx = x - startX;
-                // Vertical upward travel moves the banner; anything else stays put.
+                // Upward travel moves the banner straight up the Y axis. The X
+                // component is ALWAYS the -50% centring term: a swipe must never
+                // slide the card sideways, so horizontal movement is ignored and
+                // the transform is rebuilt from scratch every frame.
                 if (dy < 0 && Math.abs(dy) >= Math.abs(dx)) {
                     if (Math.abs(dy) > SWIPE_START_PX) swallowNextClick(toast);
-                    toast.style.transform = `translate3d(-50%, ${Math.max(dy, -120)}px, 0)`;
-                    toast.style.opacity = String(Math.max(0.15, 1 - Math.abs(dy) / 140));
+                    toast.style.transform = `translate3d(0, ${Math.max(dy, -140)}px, 0)`;
+                    toast.style.opacity = String(Math.max(0.1, 1 - Math.abs(dy) / 140));
                 }
             };
 
@@ -8699,7 +8744,7 @@
                 } else {
                     // Not far enough: spring back, and clear the tap guard so the
                     // next genuine tap still opens the turn.
-                    toast.style.transform = 'translate3d(-50%,0,0)';
+                    toast.style.transform = 'translate3d(0,0,0)';
                     toast.style.opacity = '1';
                     setTimeout(() => { if (!toast.classList.contains('hidden')) toast.dataset.swipeGuard = '0'; }, 60);
                 }
