@@ -713,6 +713,60 @@ function updateShotTimerHUD(){
   el.style.fontWeight='900';
 }
 
+/* TURN DEADLINE — the server forfeits a turn that sits untouched for 5
+ * minutes (expire_pool_turn_duels()). This mirrors that clock in the table so
+ * the player is warned while they can still act, instead of finding out from a
+ * "match lost" notification. The server stays authoritative: the countdown is
+ * computed from the row's own start time, not from when this page opened. */
+const TURN_DEADLINE_MS=5*60*1000;
+const TURN_WARNING_AT_MS=60*1000;   // last minute
+let turnDeadlineInterval=null;
+let turnDeadlineAt=0;
+let turnDeadlineWarned=false;
+
+async function syncTurnDeadline(){
+  if(!TURN_BASED||!poolOwnChallengeId)return;
+  const sb=getSB();if(!sb)return;
+  try{
+    const{data,error}=await sb.rpc('pool_turn_deadline',{p_challenge_id:String(SOLO_MATCH_ID||poolOwnChallengeId)});
+    if(error||!data)return;
+    const deadline=Date.parse(data.deadline_at||'');
+    if(!Number.isFinite(deadline))return;
+    turnDeadlineAt=deadline;
+  }catch(error){
+    // A missing RPC (older backend) is not an error worth surfacing.
+    console.warn('[8-ball] turn deadline unavailable:',error?.message||error);
+  }
+}
+
+function startTurnDeadlineWatch(){
+  if(!TURN_BASED)return;
+  stopTurnDeadlineWatch();
+  if(!turnDeadlineAt)turnDeadlineAt=Date.now()+TURN_DEADLINE_MS;
+  turnDeadlineWarned=false;
+  turnDeadlineInterval=setInterval(()=>{
+    if(state==='over'||turnSaveInProgress){stopTurnDeadlineWatch();return;}
+    const left=turnDeadlineAt-Date.now();
+    if(left<=TURN_WARNING_AT_MS&&!turnDeadlineWarned){
+      turnDeadlineWarned=true;
+      // Warn once, while the turn can still be played.
+      toast('Speed up — under 1 minute before this turn is forfeited',4200);
+      try{window.parent.postMessage({type:'oddzone:pool-turn-warning',challengeId:poolOwnChallengeId},'*');}catch(e){}
+    }
+    if(left<=0){
+      stopTurnDeadlineWatch();
+      // The server will award the match to the rival. Say so instead of
+      // leaving the player staring at a table that no longer counts.
+      toast('Turn expired — the match is being awarded to your opponent',5000);
+    }
+  },1000);
+}
+
+function stopTurnDeadlineWatch(){
+  clearInterval(turnDeadlineInterval);
+  turnDeadlineInterval=null;
+}
+
 /* Starts the strict 1-minute clock. Called from shoot(), on the player's very
  * FIRST shot only -- never on load, never while waiting for a rival. */
 function startTurnTimer(){
@@ -1514,6 +1568,7 @@ async function endPoolTurn(reason){
   if(!TURN_BASED||state==='over'||turnSaveInProgress)return;
   stopTurnTimer();
   stopShotTimer();
+  stopTurnDeadlineWatch();
   const timerBox=$('turnTimerBox');if(timerBox)timerBox.style.display='none';
   turnExpiryPending=false;
   state='wait';
@@ -1696,7 +1751,7 @@ async function readPoolMatchRows(sb,challengeId){
 
 async function finishPoolTurn(winnerSeat,reason){
   if(!TURN_BASED||turnSaveInProgress||(terminalTurnSaved&&winnerSeat!==asyncWinner))return;
-  state='over';stopTurnTimer();stopShotTimer();updateHud();
+  state='over';stopTurnTimer();stopShotTimer();stopTurnDeadlineWatch();updateHud();
   asyncWinner=winnerSeat;asyncEndReason=reason;
   const localWinner=winnerSeat===TURN_SEAT;
   $('endTitle').textContent='Confirming result…';
@@ -2842,6 +2897,8 @@ async function startSoloBackedAsyncMatch(){
     setPowerUI(0);updateHud();renderSlots();
     // This player's shot: 30 s to take it, or the turn passes automatically.
     armShotTimer(true);
+    // And the 5-minute deadline for the whole turn, mirrored from the server.
+    void syncTurnDeadline().then(()=>startTurnDeadlineWatch());
     toast('Your turn — continue the saved table',2800);
   }
   newGame();

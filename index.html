@@ -8488,14 +8488,73 @@
         function hidePoolTurnToast(toast = document.getElementById('pool-turn-toast')) {
             if (!toast) return;
             clearTimeout(Number(toast.dataset.timer) || 0);
-            toast.style.transition = 'transform .18s ease-in, opacity .18s ease-in';
-            toast.style.transform = 'translate(-50%,-120%)';
+            swallowNextClick(toast);
+            toast.style.transition = 'transform .2s cubic-bezier(.4,0,1,1), opacity .2s ease-in';
+            toast.style.transform = 'translate3d(-50%,-130%,0)';
             toast.style.opacity = '0';
             setTimeout(() => {
                 toast.classList.add('hidden');
                 toast.style.transform = '';
                 toast.style.opacity = '';
-            }, 190);
+            }, 210);
+        }
+
+        // A dismissal ends with a click event; that click must not also open
+        // the turn. Escape hatches: the dataset flag and a short time window.
+        function swallowNextClick(toast) {
+            toast.dataset.swipeGuard = String(Date.now());
+        }
+        function isSwipeGuardActive(toast) {
+            const at = Number(toast.dataset.swipeGuard || 0);
+            return Date.now() - at < 600;
+        }
+
+        // The shared notification style. The banner sits in the browser's
+        // VISUAL viewport (position:fixed + dvh units), keeps away from the
+        // right edge on narrow phones, and lets long text wrap instead of
+        // being clipped behind the button.
+        function applyToastStyles(toast) {
+            const narrow = window.matchMedia && window.matchMedia('(max-width: 380px)').matches;
+            toast.style.cssText = [
+                'position:fixed',
+                'z-index:120',
+                'top:calc(env(safe-area-inset-top, 0px) + 12px)',
+                'left:50%',
+                'right:auto',
+                'transform:translate3d(-50%,0,0)',
+                'width:calc(100vw - 24px)',
+                'max-width:420px',
+                'box-sizing:border-box',
+                'padding:12px 14px',
+                'border:1px solid rgba(52,211,153,.5)',
+                'border-radius:16px',
+                'background:#10231f',
+                'color:#f8fafc',
+                'box-shadow:0 12px 40px rgba(0,0,0,.45)',
+                'display:flex',
+                'flex-direction:' + (narrow ? 'column' : 'row'),
+                'align-items:' + (narrow ? 'stretch' : 'center'),
+                'gap:' + (narrow ? '10px' : '12px'),
+                'cursor:pointer',
+                'overflow:hidden',
+                // The banner owns vertical gestures: Safari must not scroll the
+                // page (or bounce it) out from under the swipe-up.
+                'touch-action:none',
+                '-webkit-touch-callout:none',
+                '-webkit-user-select:none',
+                'user-select:none',
+                '-webkit-tap-highlight-color:transparent',
+                'will-change:transform,opacity',
+                'transition:transform .2s ease-out, opacity .2s ease-out'
+            ].join(';');
+            const text = toast.querySelector('.pool-turn-toast-text');
+            if (text) {
+                text.style.cssText = 'flex:1 1 auto;min-width:0;font-size:12px;font-weight:800;line-height:1.4;overflow-wrap:anywhere;word-break:break-word;white-space:normal;padding-right:' + (narrow ? '0' : '2px');
+            }
+            const button = toast.querySelector('.pool-turn-toast-btn');
+            if (button) {
+                button.style.cssText = 'border:0;border-radius:10px;padding:11px 13px;background:#34d399;color:#06251b;font-size:11px;font-weight:900;white-space:nowrap;cursor:pointer;touch-action:manipulation;flex:0 0 auto;align-self:' + (narrow ? 'stretch' : 'center');
+            }
         }
 
         function showPoolTurnToast(notification) {
@@ -8508,93 +8567,195 @@
                 toast.setAttribute('tabindex', '0');
                 toast.setAttribute('aria-live', 'polite');
                 toast.setAttribute('aria-label', 'Your turn in 8-Ball Pool. Tap to open, or swipe up to dismiss.');
-                // touch-action:none / user-select:none let the swipe-up gesture
-                // read cleanly on mobile instead of scrolling the page under it.
-                toast.style.cssText = 'position:fixed;z-index:120;top:max(12px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:min(92vw,420px);padding:14px 16px;border:1px solid rgba(52,211,153,.5);border-radius:16px;background:#10231f;color:#f8fafc;box-shadow:0 12px 40px rgba(0,0,0,.45);display:flex;align-items:center;gap:12px;cursor:pointer;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;will-change:transform,opacity;transition:transform .18s ease-out,opacity .18s ease-out';
                 const text = document.createElement('div');
                 text.className = 'pool-turn-toast-text';
-                text.style.cssText = 'flex:1;font-size:12px;font-weight:800;line-height:1.4';
                 const button = document.createElement('button');
                 button.type = 'button';
+                button.className = 'pool-turn-toast-btn';
                 button.textContent = 'Your Turn! Open';
-                button.style.cssText = 'border:0;border-radius:10px;padding:11px 13px;background:#34d399;color:#06251b;font-size:11px;font-weight:900;white-space:nowrap;cursor:pointer;touch-action:manipulation';
-                const openTurn = () => {
-                    hidePoolTurnToast(toast);
-                    void openDuelFromNotification(toast.dataset.challengeId);
-                };
-                // The WHOLE banner is the tap target, not just the small button:
-                // on a phone the button was easy to miss.
-                button.addEventListener('click', event => { event.stopPropagation(); openTurn(); });
+                // The message itself is not a click target: every tap lands on
+                // the banner, which opens the turn. The button stops its own
+                // propagation so a tap never opens twice.
+                text.style.pointerEvents = 'none';
+                button.addEventListener('click', event => {
+                    event.stopPropagation();
+                    if (isSwipeGuardActive(toast)) return;
+                    openPoolTurnToast(toast);
+                });
                 toast.append(text, button);
                 document.body.appendChild(toast);
-
-                // Tap anywhere on the banner to open the turn. A gesture that
-                // turned into a swipe must not also fire this.
-                toast.addEventListener('click', () => {
-                    if (toast.dataset.swiped === '1') return;
-                    openTurn();
-                });
-                toast.addEventListener('keydown', event => {
-                    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openTurn(); }
-                });
-
-                // SWIPE-UP TO DISMISS. Tracks one pointer; the banner follows
-                // the finger upward past a short threshold to hide.
-                let startY = null;
-                let startX = 0;
-                let activePointer = null;
-                toast.addEventListener('pointerdown', event => {
-                    if (event.target.closest('button') && event.pointerType === 'mouse') return;
-                    startY = event.clientY;
-                    startX = event.clientX;
-                    activePointer = event.pointerId;
-                    toast.dataset.swiped = '0';
-                    toast.style.transition = 'none';
-                    try { toast.setPointerCapture(event.pointerId); } catch (e) {}
-                });
-                toast.addEventListener('pointermove', event => {
-                    if (startY === null || event.pointerId !== activePointer) return;
-                    const dy = event.clientY - startY;
-                    const dx = event.clientX - startX;
-                    if (Math.abs(dy) > Math.abs(dx) && dy < 0) {
-                        // Only upward travel moves the banner; a downward drag
-                        // springs back.
-                        toast.style.transform = `translate(-50%, ${Math.max(dy, -60)}px)`;
-                        if (dy < -8) toast.dataset.swiped = '1';
-                    }
-                });
-                const endSwipe = event => {
-                    if (startY === null || (event.pointerId !== undefined && event.pointerId !== activePointer)) return;
-                    const dy = (event.clientY ?? startY) - startY;
-                    const dx = Math.abs((event.clientX ?? startX) - startX);
-                    startY = null;
-                    activePointer = null;
-                    toast.style.transition = 'transform .18s ease-out,opacity .18s ease-out';
-                    if (dy < -30 && Math.abs(dy) > dx) {
-                        toast.dataset.swiped = '1';
-                        hidePoolTurnToast(toast);
-                    } else if (dy < -8) {
-                        // A small nudge upward counts as a tap-dismiss intent.
-                        toast.dataset.swiped = '1';
-                        hidePoolTurnToast(toast);
-                    } else {
-                        toast.style.transform = 'translate(-50%, 0)';
-                    }
-                };
-                toast.addEventListener('pointerup', endSwipe);
-                toast.addEventListener('pointercancel', endSwipe);
+                attachPoolToastSwipe(toast);
             }
+            applyToastStyles(toast);
             toast.dataset.challengeId = String(notification.challenge_id);
-            toast.dataset.swiped = '0';
-            toast.style.transition = 'transform .18s ease-out,opacity .18s ease-out';
-            toast.style.transform = 'translate(-50%, 0)';
-            toast.style.opacity = '';
+            toast.dataset.swipeGuard = '0';
             toast.querySelector('.pool-turn-toast-text').textContent = 'Your Turn! Your 8-Ball Pool opponent has finished their turn.';
-            // Let the player tap the message itself as well as the button.
-            toast.querySelector('.pool-turn-toast-text').style.pointerEvents = 'none';
             toast.classList.remove('hidden');
+            // Re-entry from the hidden state: force the browser to see the
+            // start transform before the transition back to rest.
+            void toast.offsetWidth;
+            toast.style.transition = 'transform .2s ease-out, opacity .2s ease-out';
+            toast.style.transform = 'translate3d(-50%,0,0)';
+            toast.style.opacity = '1';
             clearTimeout(Number(toast.dataset.timer) || 0);
             toast.dataset.timer = String(setTimeout(() => hidePoolTurnToast(toast), 9000));
+        }
+
+        function openPoolTurnToast(toast) {
+            hidePoolTurnToast(toast);
+            void openDuelFromNotification(toast.dataset.challengeId);
+        }
+
+        /* 5-minute deadline banner.
+         *
+         * Same element, same gesture handling and same viewport-safe layout as
+         * the "Your Turn!" banner, so a warning behaves like a notification
+         * rather than a different widget: tap to open the match, swipe up to
+         * dismiss. Colour changes with severity (amber = about to expire,
+         * rose = already forfeited, emerald = the rival forfeited). */
+        function showPoolDeadlineToast(row) {
+            const toast = document.getElementById('pool-turn-toast');
+            if (!toast || !row) return;
+            const kind = String(row.kind || '').toLowerCase();
+            const lost = kind.includes('timeout_loss');
+            const won = kind.includes('timeout_win');
+            const text = lost
+                ? 'Time up — your 8-Ball match was awarded to your opponent.'
+                : won
+                    ? 'Your opponent ran out of time. The 8-Ball match is yours.'
+                    : (row.body || 'Your 8-Ball turn is about to expire. Play now or forfeit the match.');
+            toast.dataset.challengeId = String(row.challenge_id || toast.dataset.challengeId || '');
+            toast.dataset.swipeGuard = '0';
+            toast.querySelector('.pool-turn-toast-text').textContent = text;
+            const button = toast.querySelector('.pool-turn-toast-btn');
+            if (button) button.textContent = lost || won ? 'View Match' : 'Play Now';
+            applyToastStyles(toast);
+            const accent = lost ? 'rgba(244,114,114,.55)' : won ? 'rgba(52,211,153,.55)' : 'rgba(251,191,36,.6)';
+            const bg = lost ? '#2a1518' : won ? '#10231f' : '#2a2313';
+            const btnBg = lost ? '#f87171' : won ? '#34d399' : '#fbbf24';
+            toast.style.border = `1px solid ${accent}`;
+            toast.style.background = bg;
+            if (button) button.style.background = btnBg;
+            toast.classList.remove('hidden');
+            void toast.offsetWidth;
+            toast.style.transition = 'transform .2s ease-out, opacity .2s ease-out';
+            toast.style.transform = 'translate3d(-50%,0,0)';
+            toast.style.opacity = '1';
+            clearTimeout(Number(toast.dataset.timer) || 0);
+            // A deadline warning is NOT dismissed on a timer: it stays until
+            // the player acts or swipes it away.
+            if (won || lost) {
+                toast.dataset.timer = String(setTimeout(() => hidePoolTurnToast(toast), 12000));
+            }
+        }
+
+        /* SWIPE-UP TO DISMISS.
+         *
+         * Three input sources, because phones disagree about which one they
+         * deliver and Safari's default scrolling can cancel whichever it likes:
+         *   - pointer events (Chrome/Android, iPadOS, desktop)
+         *   - touch events (older iOS Safari, which may not emit pointermove)
+         *   - a plain click/tap, which only opens the turn (never both).
+         * `touch-action:none` on the banner is what stops Safari from turning
+         * the vertical drag into a page scroll and firing pointercancel first.
+         */
+        function attachPoolToastSwipe(toast) {
+            const SWIPE_DISMISS_PX = 36;   // travel that counts as a swipe
+            const SWIPE_START_PX = 6;      // travel that proves a drag, not a tap
+            let startY = null;
+            let startX = 0;
+            let activeId = null;
+            let mode = null;               // 'pointer' | 'touch'
+
+            const begin = (id, x, y) => {
+                startY = y;
+                startX = x;
+                activeId = id;
+                toast.dataset.swipeGuard = '0';
+                toast.style.transition = 'none';
+            };
+
+            const move = (x, y) => {
+                if (startY === null) return;
+                const dy = y - startY;
+                const dx = x - startX;
+                // Vertical upward travel moves the banner; anything else stays put.
+                if (dy < 0 && Math.abs(dy) >= Math.abs(dx)) {
+                    if (Math.abs(dy) > SWIPE_START_PX) swallowNextClick(toast);
+                    toast.style.transform = `translate3d(-50%, ${Math.max(dy, -120)}px, 0)`;
+                    toast.style.opacity = String(Math.max(0.15, 1 - Math.abs(dy) / 140));
+                }
+            };
+
+            const end = (x, y) => {
+                if (startY === null) return;
+                const dy = (typeof y === 'number' ? y : startY) - startY;
+                const dx = Math.abs((typeof x === 'number' ? x : startX) - startX);
+                startY = null;
+                activeId = null;
+                toast.style.transition = 'transform .2s ease-out, opacity .2s ease-out';
+                if (dy <= -SWIPE_DISMISS_PX && Math.abs(dy) > dx) {
+                    hidePoolTurnToast(toast);
+                } else {
+                    // Not far enough: spring back, and clear the tap guard so the
+                    // next genuine tap still opens the turn.
+                    toast.style.transform = 'translate3d(-50%,0,0)';
+                    toast.style.opacity = '1';
+                    setTimeout(() => { if (!toast.classList.contains('hidden')) toast.dataset.swipeGuard = '0'; }, 60);
+                }
+            };
+
+            // ── pointer ──────────────────────────────────────────────────────
+            toast.addEventListener('pointerdown', event => {
+                if (event.pointerType === 'mouse' && event.button > 0) return;
+                mode = 'pointer';
+                try { toast.setPointerCapture(event.pointerId); } catch (e) {}
+                begin(event.pointerId, event.clientX, event.clientY);
+            });
+            toast.addEventListener('pointermove', event => {
+                if (mode !== 'pointer' || event.pointerId !== activeId) return;
+                move(event.clientX, event.clientY);
+            }, { passive: true });
+            const pointerEnd = event => {
+                if (mode !== 'pointer' || event.pointerId !== activeId) return;
+                end(event.clientX, event.clientY);
+            };
+            toast.addEventListener('pointerup', pointerEnd);
+            toast.addEventListener('pointercancel', pointerEnd);
+
+            // ── touch (iOS Safari fallback) ──────────────────────────────────
+            toast.addEventListener('touchstart', event => {
+                if (mode === 'pointer') return;
+                const t = event.changedTouches[0];
+                mode = 'touch';
+                begin(t.identifier, t.clientX, t.clientY);
+            }, { passive: true });
+            toast.addEventListener('touchmove', event => {
+                if (mode !== 'touch') return;
+                const t = event.changedTouches[0];
+                if (!t || t.identifier !== activeId) return;
+                move(t.clientX, t.clientY);
+            }, { passive: true });
+            const touchEnd = event => {
+                if (mode !== 'touch') return;
+                const t = [...event.changedTouches].find(touch => touch.identifier === activeId);
+                end(t ? t.clientX : undefined, t ? t.clientY : undefined);
+            };
+            toast.addEventListener('touchend', touchEnd);
+            toast.addEventListener('touchcancel', touchEnd);
+
+            // ── tap / keyboard ───────────────────────────────────────────────
+            toast.addEventListener('click', () => {
+                if (isSwipeGuardActive(toast)) return;
+                openPoolTurnToast(toast);
+            });
+            toast.addEventListener('keydown', event => {
+                if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openPoolTurnToast(toast); }
+            });
+
+            // Rotating or resizing re-fits the banner to the new viewport.
+            window.addEventListener('resize', () => applyToastStyles(toast), { passive: true });
+            window.addEventListener('orientationchange', () => setTimeout(() => applyToastStyles(toast), 120), { passive: true });
         }
 
         function subscribePoolTurnNotifications() {
@@ -8609,6 +8770,7 @@
             // its turn. Show it on INSERT (realtime) and, as a fallback for a
             // dropped socket, when a fresh row is fetched.
             lastSeenPoolTurnNotificationId = null;
+            lastSeenPoolDeadlineNotificationId = null;
             poolTurnNotificationsChannel = client.channel(`pool-turn-notifications:${activeUser.id}`)
                 .on('postgres_changes', {
                     event: 'INSERT',
@@ -8617,6 +8779,11 @@
                     filter: `user_id=eq.${activeUser.id}`
                 }, payload => {
                     const row = payload.new || {};
+                    if (isPoolDeadlineNotification(row)) {
+                        showPoolDeadlineToast(row);
+                        void loadDuelNotifications().catch(error => console.error('Could not refresh pool deadline notifications:', error));
+                        return;
+                    }
                     if (!isPoolTurnNotification(row)) return;
                     showPoolTurnToast(row);
                     void loadDuelNotifications().catch(error => console.error('Could not refresh pool-turn notifications:', error));
@@ -8636,6 +8803,14 @@
             return kind.includes('pool_turn') || kind.includes('pool-turn') || kind.includes('turn_ready');
         }
 
+        // The 5-minute deadline notice (warn_stalled_pool_turns) and its
+        // outcomes. Shown on the same banner so a player who is not staring at
+        // My Games still learns their turn is about to expire.
+        function isPoolDeadlineNotification(row) {
+            const kind = String(row?.kind || '').toLowerCase();
+            return kind.includes('pool_turn_deadline') || kind.includes('pool_turn_timeout');
+        }
+
         let lastSeenPoolTurnNotificationId = null;
 
         // Fallback path: the same banner is raised for a turn-ready row seen in
@@ -8647,6 +8822,17 @@
             if (!newest || String(newest.id) === String(lastSeenPoolTurnNotificationId)) return;
             lastSeenPoolTurnNotificationId = newest.id;
             if (!newest.read_at) showPoolTurnToast(newest);
+        }
+
+        // Same fallback for deadline notices: a missed realtime INSERT must not
+        // leave a player unaware their turn is expiring (or expired).
+        let lastSeenPoolDeadlineNotificationId = null;
+        function maybeShowPoolDeadlineFromRows(rows) {
+            if (typeof document.hidden === 'boolean' && document.hidden) return;
+            const newest = (rows || []).find(isPoolDeadlineNotification);
+            if (!newest || String(newest.id) === String(lastSeenPoolDeadlineNotificationId)) return;
+            lastSeenPoolDeadlineNotificationId = newest.id;
+            if (!newest.read_at) showPoolDeadlineToast(newest);
         }
 
         async function loadDuelNotifications() {
@@ -8664,6 +8850,7 @@
                 .order('created_at', { ascending: false })
                 .limit(50);
             if (error) throw error;
+            maybeShowPoolDeadlineFromRows(data || []);
             maybeShowPoolTurnFromRows(data || []);
             remoteDuelNotifications = (data || []).map(notification => ({
                 id: `server-${notification.id}`,
@@ -10444,6 +10631,22 @@
         window.checkGameFileAvailable = checkGameFileAvailable;
         window.showGameLoadError = showGameLoadError;
         window.launchGameModule = launchGameModule;
+
+        // KYC entry points. The verification buttons live in the page BODY
+        // (profile card, settings panel, KYC modal header and its submit
+        // button) and use inline onclick handlers. Inline handlers resolve
+        // their names on the GLOBAL object, but every one of these functions is
+        // declared inside this <script>, so the names were not on window: every
+        // "Verify BVN" / submit tap threw
+        //   ReferenceError: openKycModal is not defined
+        // and the verification flow could not be started from the UI at all.
+        // Exposing them here is what makes the front end reach the Edge
+        // Function in the first place.
+        window.openKycModal = openKycModal;
+        window.closeKycModal = closeKycModal;
+        window.startBiometricKyc = startBiometricKyc;
+        window.checkBiometricKycStatus = checkBiometricKycStatus;
+        window.openWithdrawModal = openWithdrawModal;
 
         // matchmaking.js (an ES module) reads these off window: they are
         // script-scoped here, so without the handles the duel screens lose the
