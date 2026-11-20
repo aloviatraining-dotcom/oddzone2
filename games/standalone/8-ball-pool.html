@@ -105,6 +105,19 @@
   .mini.slot{background:#0c0914;opacity:.8;box-shadow:inset 0 2px 4px #000}
   .ms{text-align:center;line-height:1.1;font-size:10px}.ms i{display:block;font-style:normal;color:#9fb0d0}
   .ms b{font-size:14px;font-variant-numeric:tabular-nums}
+  /* Per-stick shot clock: a circular loading ring that sweeps down from the
+     full 50 s to 0 with the live seconds in the middle. */
+  #shotTimerHud{position:relative;width:52px;height:52px;flex:none;margin:6px auto 0;display:grid;place-items:center}
+  #shotTimerHud.hidden{display:none}
+  #shotTimerRing{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg);pointer-events:none}
+  #shotTimerRing .track{fill:none;stroke:rgba(255,255,255,.14);stroke-width:6}
+  #shotTimerRing .arc{fill:none;stroke:#ffd54a;stroke-width:6;stroke-linecap:round;
+    transition:stroke .2s linear}
+  #shotTimerNum{position:relative;font:900 15px/1 var(--sans);color:#ffd54a;font-variant-numeric:tabular-nums;pointer-events:none}
+  #shotTimerHud.low #shotTimerRing .arc{stroke:#ef6a57}
+  #shotTimerHud.low #shotTimerNum{color:#ef6a57}
+  #shotTimerHud.mid #shotTimerRing .arc{stroke:#f0a030}
+  #shotTimerHud.mid #shotTimerNum{color:#f0a030}
   .dial{width:34px;height:34px;flex:none;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,#d9d9d9);color:#2a1d05;
     display:grid;place-content:center;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,.5);border:2px solid #9aa4b8}
   .dial b{font-size:10px;font-variant-numeric:tabular-nums}
@@ -160,6 +173,13 @@
       <div class="slots" id="trayL"></div>
       <div class="ms"><i>Shots</i><b id="hudShots">0</b></div>
       <div class="ms" id="turnTimerBox" style="display:none"><i>Timer</i><b id="turnTimerDisplay" style="color:#ffd54a">60s</b></div>
+      <div id="shotTimerHud" class="hidden" role="timer" aria-label="Shot clock">
+        <svg id="shotTimerRing" viewBox="0 0 52 52" aria-hidden="true">
+          <circle class="track" cx="26" cy="26" r="22"></circle>
+          <circle class="arc" id="shotTimerArc" cx="26" cy="26" r="22"></circle>
+        </svg>
+        <span id="shotTimerNum">50</span>
+      </div>
       <div class="cuePanel" id="cuePanel" aria-label="Pull the cue down and release to shoot">
         <div class="cueStick" id="cueStick"></div>
       </div>
@@ -621,11 +641,13 @@ let turnPreTurnState=null;
 let turnShotsReplay=[];
 let replayPlayback=null;
 
-/* PER-SHOT TIMER — 30 s to line the cue up and shoot.
+/* PER-STICK TIMER — 50 s to line the cue up and shoot.
  * Runs independently of the 60 s run clock: it is re-armed every time the
- * table becomes this player's to shoot, and if it expires the table is saved
- * and the turn is passed to the other player automatically. */
-const SHOT_SECONDS=30;
+ * table becomes this player's to shoot AND after every legal pot (the player
+ * keeps their turn), and if it expires the table is saved and the turn is
+ * passed to the other player automatically. It is drawn as a circular
+ * loading ring that sweeps down from a full 50 s to 0 s. */
+const SHOT_SECONDS=50;
 let shotTimerInterval=null;
 let shotDeadline=0;
 let shotSecondsLeft=SHOT_SECONDS;
@@ -635,26 +657,33 @@ let shotExpiryBusy=false;
  * any rack in the arena. A free friendly rack is untimed. */
 const isTimedRun=()=>SOLO_BACKED||SOLO_MODE||mode==='async'||mode==='online';
 
-/* Can this device take a 30 s shot right now? Only an actual turn-based
+/* Can this device take a 50 s shot right now? Only an actual turn-based
  * rack, on an owned turn, with the table at rest. */
 function canArmShotTimer(){
   return TURN_BASED&&asyncState.ready&&state==='aim'&&cur===TURN_SEAT&&!turnSaveInProgress&&!terminalTurnSaved;
 }
 
-/* Arm (or re-arm) the 30 s shot clock. Safe to call repeatedly. */
+/* Arm (or re-arm) the 50 s shot clock. Safe to call repeatedly. */
 function armShotTimer(reset=true){
   if(!TURN_BASED)return;
   if(reset)shotSecondsLeft=SHOT_SECONDS;
   if(!canArmShotTimer()){
-    // Not our throw: park the clock but keep it visible with its full value.
+    // Not our throw: the ring is hidden until the table is ours to shoot.
     stopShotTimer();
     shotSecondsLeft=SHOT_SECONDS;
-    updateShotTimerHUD();
     return;
   }
   stopShotTimer();
   shotDeadline=performance.now()+shotSecondsLeft*1000;
+  // Restart the circular animation from a FULL ring: the arc eases back to
+  // 100% and then sweeps down as the 50 s tick away.
+  const hud=$('shotTimerHud');
+  if(hud)hud.classList.remove('hidden');
+  const arc=$('shotTimerArc');
+  if(arc){arc.style.transition='stroke .2s linear';arc.style.strokeDashoffset='0';}
   updateShotTimerHUD();
+  // 100 ms ticks: the seconds change on the wall clock, and the ring's own
+  // CSS transition makes the sweep continuous rather than stepping.
   shotTimerInterval=setInterval(()=>{
     shotSecondsLeft=Math.max(0,Math.ceil((shotDeadline-performance.now())/1000));
     updateShotTimerHUD();
@@ -662,16 +691,19 @@ function armShotTimer(reset=true){
       stopShotTimer();
       void expireShotTimer();
     }
-  },200);
+  },100);
 }
 
-/* The cue was used (or the turn ended): pause the shot clock. */
+/* The cue was used (or the turn ended): pause the shot clock and hide the
+ * ring — a frozen ring would read as a timer still running. */
 function stopShotTimer(){
   clearInterval(shotTimerInterval);
   shotTimerInterval=null;
+  const hud=$('shotTimerHud');
+  if(hud)hud.classList.add('hidden');
 }
 
-/* 30 s gone without a shot: commit the table as it stands and pass the turn. */
+/* 50 s gone without a shot: commit the table as it stands and pass the turn. */
 async function expireShotTimer(){
   if(shotExpiryBusy||turnSaveInProgress||state==='over')return;
   // The player already shot (or the ball is still rolling) while the clock
@@ -696,21 +728,27 @@ async function expireShotTimer(){
   }
 }
 
+/* Paint the 50 s shot clock as a circular loading ring.
+ *   - the arc is measured in path length, so the sweep is exact for any size;
+ *   - the remaining seconds sit in the middle of the ring;
+ *   - the colour steps amber → red in the last 20 s / 10 s. */
+const SHOT_RING_CIRCUMFERENCE=2*Math.PI*22;   // r=22 in the 52×52 viewBox
 function updateShotTimerHUD(){
-  // Use the existing turn-timer box when the table has one; otherwise a small
-  // pill above the cue panel is created on demand.
-  let el=$('shotTimerDisplay');
-  const box=$('turnTimerBox');
-  if(!el&&box){
-    el=document.createElement('div');
-    el.id='shotTimerDisplay';
-    el.setAttribute('role','timer');
-    box.appendChild(el);
-  }
-  if(!el)return;
-  el.textContent=shotSecondsLeft+'s';
-  el.style.color=shotSecondsLeft<=5?'#ef6a57':shotSecondsLeft<=10?'#f0a030':'#ffd54a';
-  el.style.fontWeight='900';
+  const hud=$('shotTimerHud');
+  const arc=$('shotTimerArc');
+  const num=$('shotTimerNum');
+  if(!hud||!arc||!num)return;
+  hud.classList.remove('hidden');
+  const total=SHOT_SECONDS||50;
+  const left=Math.max(0,Math.min(total,Number(shotSecondsLeft)||0));
+  // Fraction of time left → fraction of the ring still drawn.
+  const frac=total>0?left/total:0;
+  arc.style.strokeDasharray=SHOT_RING_CIRCUMFERENCE.toFixed(2);
+  arc.style.strokeDashoffset=(SHOT_RING_CIRCUMFERENCE*(1-frac)).toFixed(2);
+  num.textContent=String(left);
+  hud.classList.toggle('low',left<=10);
+  hud.classList.toggle('mid',left>10&&left<=20);
+  hud.setAttribute('aria-label',left+' seconds left to shoot');
 }
 
 /* TURN DEADLINE — the server forfeits a turn that sits untouched for 5
@@ -900,7 +938,7 @@ const anyMoving=()=>balls.some(b=>b.state==='sinking'||(b.state==='active'&&(b.v
 function shoot(power,remote,rspin){
   if(state!=='aim'||(!remote&&!myTurn()))return;
   if(!remote&&eightPhase()&&called===null){toast('Tap a pocket first',1800);setPowerUI(0);return;}
-  // The cue is in motion: the 30 s shot clock has done its job for this shot.
+  // The cue is in motion: the 50 s shot clock has done its job for this shot.
   if(!remote)stopShotTimer();
   preShotObjLeft=players[cur].group?left(players[cur].group):0;
   if(!remote&&TURN_BASED){
@@ -986,7 +1024,9 @@ function endShot(){
   if(!foul){if(me.group)foul=firstHit===8?preShotObjLeft>0:grp(firstHit)!==me.group;else foul=firstHit===8;}
   let assigned='';
   if(!foul&&!me.group&&objs.length){me.group=grp(objs[0]);players[1-cur].group=me.group==='s'?'t':'s';assigned=me.name+(me.name==='You'?' have ':' has ')+(me.group==='s'?'solids':'stripes')+'. ';}
-  const keep=!foul&&objs.some(n=>grp(n)===me.group);
+  // A legal pot keeps the turn: the 50 s stick timer starts again from full.
+  const keptTurn=!foul&&objs.some(n=>grp(n)===me.group);
+  const keep=keptTurn;
   if(scratch)placeCue();
   if(!keep)cur=1-cur;
   const hand=foul,botHand=false;
@@ -998,6 +1038,7 @@ function endShot(){
   const turnLine = mode==='async'
     ? (keep ? 'Shoot again' : (hand ? 'Ball in hand — place the cue' : 'Your run continues'))
     : (keep ? 'Shoot again' : players[cur].name+' to shoot');
+  const keepForShotClock=keep;
   toast(assigned+(foul?(scratch?'Scratch! ':firstHit===null?'Foul: no ball! ':'Foul: wrong ball! '):'')+turnLine+(eightPhase()?'. Tap a pocket':'')+'.', 2600);
   inHand=hand||botHand;state=(hand||botHand)?'place':'aim';called=null;
   canvas.style.cursor='crosshair';setPowerUI(0);updateHud();
@@ -1016,7 +1057,21 @@ function endShot(){
   if(TURN_BASED&&(!keep||turnExpiryPending)){
     const reason=turnExpiryPending?'Time up':foul?(scratch?'Foul — scratch':'Foul — turn passed'):'Turn passed';
     void endPoolTurn(reason);
+  }else if(TURN_BASED&&keepForShotClock){   // a legal pot kept the turn
+    // Legal pot: refresh the circular 50 s loading ring for the next stick.
+    // rearmShotTimer() only opens a fresh clock when the table is actually
+    // ours and at rest, so it can never run for a passing turn.
+    rearmShotTimer();
   }
+}
+
+/* Re-open a FULL 50 s stick clock without letting the previous clock's own
+ * expiry fire in between. */
+function rearmShotTimer(){
+  if(!TURN_BASED)return;
+  stopShotTimer();
+  shotExpiryBusy=false;
+  armShotTimer(true);
 }
 
 /* MODES — declared here, before the live-duel block that uses them.
@@ -2060,7 +2115,7 @@ function snapshot(log){
 /* JSON -> live table. `mayAct` is true only when it is this device's turn. */
 function applySnapshot(sn,mayAct){
   if(!sn||!Array.isArray(sn.balls))return;
-  // A fresh table retires any 30 s clock still attached to the previous one.
+  // A fresh table retires any 50 s clock still attached to the previous one.
   stopShotTimer();
   sn.balls.forEach((a,i)=>{
     const b=balls[i];if(!b)return;
@@ -2963,7 +3018,7 @@ async function startSoloBackedAsyncMatch(){
     state=inHand?'place':'aim';
     beginPoolTurnCapture();
     setPowerUI(0);updateHud();renderSlots();
-    // This player's shot: 30 s to take it, or the turn passes automatically.
+    // This player's shot: 50 s to take it, or the turn passes automatically.
     armShotTimer(true);
     // And the 5-minute deadline for the whole turn, mirrored from the server.
     void syncTurnDeadline().then(()=>startTurnDeadlineWatch());
@@ -3368,6 +3423,8 @@ requestAnimationFrame(t=>{last=t;requestAnimationFrame(frame);});
 // Real-time bracket marker (see __oddzoneRunInfo below), installed here so it is
 // in place even while an async run is still resolving its network reads.
 window.__oddzoneRunStarted=()=>!!firstShotFired;
+// Read-only inspection of the per-stick clock (used by QA to confirm the ring).
+window.__oddzoneShotClock=()=>({total:SHOT_SECONDS,left:shotSecondsLeft,running:!!shotTimerInterval,canArm:canArmShotTimer()});
 window.__engineStage='done';
 })();
 </script>

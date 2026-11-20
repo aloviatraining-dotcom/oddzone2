@@ -6059,7 +6059,9 @@
             }
             if (!myTurn) {
                 const opponentId = seat === 0 ? row.player_b_id : row.player_a_id;
-                const profile = await fetchOpponentProfile(opponentId);
+                // A failed profile read must not turn this into a dead click:
+                // the "waiting" card is shown either way.
+                const profile = await fetchOpponentProfile(opponentId).catch(() => ({ name: 'Opponent' }));
                 showPoolLobbyStatus(
                     `Waiting for ${profile.name === 'Opponent' ? 'your rival' : profile.name}`,
                     'Your pool table is saved. You will be notified the moment your next turn is ready.',
@@ -7526,6 +7528,7 @@
             document.getElementById('arena-mode-badge').innerText = badgeLabel;
             pendingLaunchMode = mode;
             hideRunResultOverlay();
+            document.getElementById('arena-tap-to-start-overlay')?.classList.add('hidden');
             document.getElementById('external-game-container').classList.remove('hidden');
             document.getElementById('game-iframe').classList.add('hidden');
             document.getElementById('oddzone-game-frame').classList.remove('hidden');
@@ -7569,6 +7572,9 @@
             frame.src = `${encodeURI(buildGameUrl(game.path))}?${buildGameQuery(game, mode)}`;
             document.getElementById('game-arena-modal').classList.remove('hidden');
             frame.onerror = () => showGameLoadError(game, `Could not load ${game.path}.`);
+            // The start overlay is only a safety net: every launch path hides
+            // it, so it can never sit on top of a live table.
+            document.getElementById('arena-tap-to-start-overlay')?.classList.add('hidden');
             document.getElementById('game-scoreboard').classList.toggle('hidden', !isTimedMode || game.id === '8ball');
         }
 
@@ -7715,12 +7721,20 @@
         // real report that drops below it is the new rack's 0 and clears it.
         let preRunScorePeak = 0;
         let preRunScoreIgnored = false;
+        // The last score a module actually reported. Used when a module has no
+        // __oddzoneReadScore reader (the message bridge is its only path).
+        let lastReportedScore = 0;
 
         function readActiveGameScore() {
             const gameFrame = document.getElementById('oddzone-game-frame');
             try {
-                const scoreReader = gameFrame.contentWindow?.__oddzoneReadScore;
-                const score = typeof scoreReader === 'function' ? Number(scoreReader.call(gameFrame.contentWindow)) : Number.NaN;
+                const scoreReader = gameFrame?.contentWindow?.__oddzoneReadScore;
+                if (typeof scoreReader !== 'function') {
+                    // No reader in the module: the postMessage bridge is the
+                    // score source, and ignoring it froze the header at 0.
+                    return Math.max(0, Math.floor(Number(lastReportedScore) || 0));
+                }
+                const score = Number(scoreReader.call(gameFrame.contentWindow));
                 if (!Number.isFinite(score)) return activeGameScore;
                 const normalised = Math.max(0, Math.floor(score));
                 if (!preRunScoreIgnored) {
@@ -7767,9 +7781,15 @@
             endTimedMatch();
         }
 
+        // The header score element is the single place the live score lands.
+        // Writing it only on change keeps the number stable and makes a stale
+        // or zeroed paint impossible.
+        let shownHeaderScore = -1;
         function updateScoreboard(score) {
+            const value = Math.max(0, Math.floor(Number(score) || 0));
             const scoreElem = document.getElementById('match-score');
-            if (scoreElem) scoreElem.innerText = Number(score).toLocaleString();
+            if (scoreElem) scoreElem.textContent = value.toLocaleString();
+            shownHeaderScore = value;
         }
 
         function showGameOverBanner() {
@@ -7817,6 +7837,7 @@
             // here made every game start at the last score instead of 0.
             preRunScorePeak = 0;
             preRunScoreIgnored = false;
+            lastReportedScore = 0;
             activeGameScore = 0;
             bankedGameScore = 0;
             // 8-Ball Pool runs on the strict one-minute clock, started by the
@@ -7856,7 +7877,7 @@
             };
             document.getElementById('scoreboard-mode').innerText = gameId === '8ball' ? '1-Minute Run' : '2-Minute Match';
             document.getElementById('scoreboard-player').innerText = activeUser.name;
-            document.getElementById('match-score').innerText = activeGameScore.toLocaleString();
+            updateScoreboard(activeGameScore);
             document.getElementById('match-timer').innerText = formatRunDuration();
             // Every non-pool run shows the live header score; the pool module
             // draws its own HUD on the table.
@@ -7977,9 +7998,11 @@
             const liveScore = readActiveGameScore();
             if (liveScore > bankedGameScore) bankedGameScore = liveScore;
             activeGameScore = bankedGameScore;
+            if (activeGameScore > lastReportedScore) lastReportedScore = activeGameScore;
             // The header must always show the score as it is earned -- both the
-            // big number and the mode line's running total.
-            updateScoreboard(activeGameScore);
+            // big number and the mode line's running total. Write the DOM only
+            // when the number changes, so a 10 Hz tick cannot fight the paint.
+            if (shownHeaderScore !== activeGameScore) updateScoreboard(activeGameScore);
             if (activeTimedMatch.gameId !== '8ball' && !activeTimedMatch.lost) {
                 const modeEl = document.getElementById('scoreboard-mode');
                 if (modeEl) {
@@ -8396,7 +8419,9 @@
                 (()=>{const canvas=document.getElementById('field'),ctx=canvas.getContext('2d');let width=0,height=0,scale=1,score=0,ended=false,shipX=.5,lastShot=0,lastSpawn=0,lastFrame=0;const keys=new Set(),shots=[],targets=[],stars=[];
                 function resize(){scale=Math.min(window.devicePixelRatio||1,2);width=innerWidth;height=innerHeight;canvas.width=Math.floor(width*scale);canvas.height=Math.floor(height*scale);ctx.setTransform(scale,0,0,scale,0,0);stars.length=0;for(let index=0;index<70;index++)stars.push({x:Math.random()*width,y:Math.random()*height,size:Math.random()*1.8+.4,speed:Math.random()*24+12})}window.addEventListener('resize',resize);resize();
                 function report(){parent.postMessage({type:'oddzone:score',score},'*')}function finish(){if(ended)return;ended=true;parent.postMessage({type:'oddzone:game-complete',score},'*')}
-                window.addEventListener('message',event=>{if(event.source===parent&&event.origin===location.origin&&event.data&&event.data.type==='oddzone:end')finish()});window.addEventListener('keydown',event=>{keys.add(event.code);if(['ArrowLeft','ArrowRight','Space'].includes(event.code))event.preventDefault()});window.addEventListener('keyup',event=>keys.delete(event.code));
+                // The arena posts oddzone:start on load and for every "Play Again":
+                // the run must reset to 0 so the header follows the new run.
+                window.addEventListener('message',event=>{if(event.source!==parent)return;if(!event.data||typeof event.data!=='object')return;if(event.data.type==='oddzone:end'){finish();return}if(event.data.type==='oddzone:start'){ended=false;score=0;targets.length=0;shots.length=0;lastFrame=performance.now();report();requestAnimationFrame(draw)}});window.addEventListener('keydown',event=>{keys.add(event.code);if(['ArrowLeft','ArrowRight','Space'].includes(event.code))event.preventDefault()});window.addEventListener('keyup',event=>keys.delete(event.code));
                 canvas.addEventListener('pointerdown',event=>{shipX=Math.max(.05,Math.min(.95,event.clientX/width));keys.add('Space')});canvas.addEventListener('pointermove',event=>{if(event.buttons)shipX=Math.max(.05,Math.min(.95,event.clientX/width))});window.addEventListener('pointerup',()=>keys.delete('Space'));
                 function draw(now){if(ended)return;const delta=Math.min((now-lastFrame)/1000,.04);lastFrame=now;ctx.clearRect(0,0,width,height);ctx.fillStyle='#07111b';ctx.fillRect(0,0,width,height);ctx.fillStyle='#b8e8ff';for(const star of stars){star.y=(star.y+star.speed*delta)%height;ctx.globalAlpha=.25+star.size/3;ctx.fillRect(star.x,star.y,star.size,star.size)}ctx.globalAlpha=1;
                 if(keys.has('ArrowLeft')||keys.has('KeyA'))shipX=Math.max(.05,shipX-260*delta/width);if(keys.has('ArrowRight')||keys.has('KeyD'))shipX=Math.min(.95,shipX+260*delta/width);
@@ -8404,7 +8429,7 @@
                 ctx.fillStyle='#65f2c2';ctx.beginPath();ctx.moveTo(shipX*width,height-90);ctx.lineTo(shipX*width-18,height-54);ctx.lineTo(shipX*width+18,height-54);ctx.closePath();ctx.fill();ctx.fillStyle='#d4fff1';ctx.fillRect(shipX*width-2,height-56,4,10);
                 ctx.fillStyle='#8de7ff';for(let index=shots.length-1;index>=0;index--){const shot=shots[index];shot.y-=430*delta;ctx.fillRect(shot.x-2,shot.y-9,4,12);if(shot.y<-12)shots.splice(index,1)}
                 for(let index=targets.length-1;index>=0;index--){const target=targets[index];target.y+=target.speed*delta;ctx.fillStyle='#ff8b72';ctx.beginPath();ctx.arc(target.x,target.y,target.r,0,Math.PI*2);ctx.fill();ctx.fillStyle='#ffd1a8';ctx.beginPath();ctx.arc(target.x-target.r*.25,target.y-target.r*.25,target.r*.25,0,Math.PI*2);ctx.fill();
-                for(let shotIndex=shots.length-1;shotIndex>=0;shotIndex--){const shot=shots[shotIndex];if(Math.hypot(target.x-shot.x,target.y-shot.y)<target.r+5){targets.splice(index,1);shots.splice(shotIndex,1);score+=10;report();break}}if(targets[index]&&target.y>height+24)targets.splice(index,1)}requestAnimationFrame(draw)}requestAnimationFrame(draw)})();
+                for(let shotIndex=shots.length-1;shotIndex>=0;shotIndex--){const shot=shots[shotIndex];if(Math.hypot(target.x-shot.x,target.y-shot.y)<target.r+5){targets.splice(index,1);shots.splice(shotIndex,1);score+=10;report();break}}if(targets[index]&&target.y>height+24)targets.splice(index,1)}requestAnimationFrame(draw)}window.__oddzoneReadScore=()=>score;window.__oddzoneStart=()=>{ended=false;score=0;report();lastFrame=performance.now();requestAnimationFrame(draw)};window.__oddzoneEnd=finish;window.__oddzoneIsOver=()=>ended;requestAnimationFrame(draw)})();
                 <\/script></body></html>`;
         }
 
@@ -8677,10 +8702,24 @@
             const validScore = hasReportedScore ? Math.floor(numericScore) : 0;
             const isValidScore = hasReportedScore;
             if (event.data.type === 'oddzone:score') {
-                // A frozen/ended module keeps re-sending its final number; that
-                // is not a sign the run is alive again.
-                preRunScoreIgnored = true;
                 if (!isValidScore) return;
+                // Do NOT touch the boot guard here. A live score report is a
+                // score, not proof the run has (re)started: flipping the guard
+                // mid-boot banked the PREVIOUS rack's total as this run's, and
+                // a module that reports 0 at the start kept it disabled.
+                if (validScore <= lastReportedScore) {
+                    // A module that restarted its own counter (new run, or a
+                    // retry after death) drops to a lower number: that is the
+                    // fresh run's 0, and the header must follow it down.
+                    if (validScore < lastReportedScore) {
+                        lastReportedScore = validScore;
+                        bankedGameScore = validScore;
+                        activeGameScore = validScore;
+                        updateScoreboard(activeGameScore);
+                    }
+                    return;
+                }
+                lastReportedScore = validScore;
                 if (validScore > bankedGameScore) bankedGameScore = validScore;
                 activeGameScore = bankedGameScore;
                 updateScoreboard(activeGameScore);
@@ -8735,6 +8774,7 @@
                 }
                 const liveScore = readActiveGameScore();
                 if (liveScore > bankedGameScore) bankedGameScore = liveScore;
+                lastReportedScore = Math.max(lastReportedScore, bankedGameScore);
                 activeGameScore = bankedGameScore;
                 // A death mid-run banks the score and restarts the game; it does
                 // not end the 2-minute match. Stake duels still end here.
@@ -9140,6 +9180,25 @@
         let poolTurnBaselineByMatch = {};
         let poolTurnCountdownTimer = null;
         let poolTurnToastDeadlineAt = 0;
+        // One auto-hide timer for the banner, owned in exactly one place. It is
+        // re-armed (never stacked) every time the banner is raised, so a raise
+        // can no longer queue a second hide that fires after the banner was
+        // dismissed or re-shown for the next turn.
+        let poolTurnAutoHideTimer = null;
+        function armPoolTurnAutoHide(toast, ms = 5000) {
+            clearTimeout(poolTurnAutoHideTimer);
+            poolTurnAutoHideTimer = null;
+            if (toast) toast.dataset.timer = '0';
+            poolTurnAutoHideTimer = setTimeout(() => {
+                poolTurnAutoHideTimer = null;
+                hidePoolTurnToast(toast);
+            }, ms);
+        }
+        function cancelPoolTurnAutoHide(toast) {
+            clearTimeout(poolTurnAutoHideTimer);
+            poolTurnAutoHideTimer = null;
+            if (toast) toast.dataset.timer = '0';
+        }
 
         function poolTurnStartedAt(row) {
             if (!row) return 0;
@@ -9218,15 +9277,21 @@
             const clock = toast.querySelector('.pool-turn-toast-clock');
             if (!clock) return;
             stopPoolTurnCountdown();
+            let lastPainted = '';
             const paint = () => {
+                // Once the banner has been dismissed there is nothing to tick.
+                if (toast.classList.contains('hidden')) { stopPoolTurnCountdown(); return; }
                 // Always recalculate from the live baseline; never use a stale
                 // cached value — that is what causes the frozen 0:00 display.
                 const seconds = poolTurnSecondsLeft(toast.dataset.matchId);
                 toast.dataset.turnSeconds = String(seconds);
-                clock.textContent = formatPoolCountdown(seconds);
+                const text = formatPoolCountdown(seconds);
+                if (text !== lastPainted) { clock.textContent = text; lastPainted = text; }
                 clock.style.color = seconds <= 60 ? '#f87171' : seconds <= 120 ? '#fbbf24' : '#a7f3d0';
             };
             paint();
+            // Tick every second from the wall clock (not a decrementing
+            // counter), so the readout can never drift or stick (e.g. on 5:00).
             poolTurnCountdownTimer = setInterval(paint, 1000);
         }
 
@@ -9245,7 +9310,9 @@
 
         function hidePoolTurnToast(toast = document.getElementById('pool-turn-toast')) {
             if (!toast) return;
-            clearTimeout(Number(toast.dataset.timer) || 0);
+            // A swipe/tap dismissal must also kill the auto-hide, or it fires
+            // again later on a banner that is already gone.
+            cancelPoolTurnAutoHide(toast);
             swallowNextClick(toast);
             // The countdown belongs to a visible banner; stop ticking it. It is
             // restarted from the SERVER clock the next time this banner is
@@ -9358,10 +9425,11 @@
                 // propagation so a tap never opens twice.
                 text.style.pointerEvents = 'none';
                 button.addEventListener('click', event => {
+                    event.preventDefault();
                     event.stopPropagation();
                     if (isSwipeGuardActive(toast)) return;
                     // Cancel the auto-hide so it doesn't fire while the match is opening.
-                    clearTimeout(Number(toast.dataset.timer) || 0);
+                    cancelPoolTurnAutoHide(toast);
                     // Distinct Web Audio click sound (no external file — inline synthesis).
                     try {
                         const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -9409,20 +9477,43 @@
             toast.style.transition = 'transform .2s ease-out, opacity .2s ease-out';
             toast.style.transform = 'translate3d(0,0,0)';
             toast.style.opacity = '1';
-            clearTimeout(Number(toast.dataset.timer) || 0);
-            // Auto-hide after 5 s — the banner stays readable but won't block
-            // the UI permanently. Swipe-up dismisses it instantly at any point.
-            toast.dataset.timer = String(setTimeout(() => hidePoolTurnToast(toast), 5000));
             startPoolTurnCountdown();
-            // Pull the authoritative start time, then re-paint with it and
-            // re-arm the auto-hide based on the real server clock.
+            // Auto-hide after 5 s — a single timer, re-armed on every raise. The
+            // banner stays readable but never blocks the UI, and swipe-up
+            // dismisses it instantly at any point.
+            armPoolTurnAutoHide(toast, 5000);
+            // Pull the authoritative start time, then re-paint from the real
+            // server clock. The auto-hide is NOT re-armed here: doing so let a
+            // slow sync push the hide out again and again.
             void syncPoolTurnBaseline(toast.dataset.matchId).then(() => {
-                if (!toast.classList.contains('hidden') && toast.dataset.matchId === String(notification.match_id || toast.dataset.matchId || '')) {
-                    startPoolTurnCountdown();
-                    clearTimeout(Number(toast.dataset.timer) || 0);
-                    toast.dataset.timer = String(setTimeout(() => hidePoolTurnToast(toast), 5000));
-                }
+                if (!toast.classList.contains('hidden')) startPoolTurnCountdown();
             });
+        }
+
+        // Distinct Web Audio "click" for the banner's Open button. One shared
+        // AudioContext, created/resumed inside the tap gesture, so a click is
+        // actually audible on iOS (a fresh suspended context is silent).
+        let oddzoneClickAudioCtx = null;
+        function playPoolTurnClickSound() {
+            try {
+                const Ctor = window.AudioContext || window.webkitAudioContext;
+                if (!Ctor) return;
+                if (!oddzoneClickAudioCtx) oddzoneClickAudioCtx = new Ctor();
+                const ctx = oddzoneClickAudioCtx;
+                if (ctx.state === 'suspended' && typeof ctx.resume === 'function') { void ctx.resume().catch(() => {}); }
+                const start = ctx.currentTime;
+                const o = ctx.createOscillator();
+                const g = ctx.createGain();
+                o.type = 'sine';
+                o.frequency.setValueAtTime(880, start);
+                o.frequency.exponentialRampToValueAtTime(440, start + 0.08);
+                g.gain.setValueAtTime(0.28, start);
+                g.gain.exponentialRampToValueAtTime(0.001, start + 0.12);
+                o.connect(g);
+                g.connect(ctx.destination);
+                o.start(start);
+                o.stop(start + 0.14);
+            } catch (e) { /* audio not available: the tap still opens the match */ }
         }
 
         // Put the banner back to its "Your Turn" colours after a deadline
@@ -9439,20 +9530,87 @@
             }
         }
 
+        // Open the turn the banner is advertising. Works from Home or from any
+        // other screen: the arena is a full-screen layer, so it is raised on
+        // top of whatever tab the player is on.
+        let poolTurnOpenInFlight = false;
         function openPoolTurnToast(toast) {
-            const challengeId = toast.dataset.challengeId;
+            if (!toast) return;
+            const challengeId = String(toast.dataset.challengeId || '');
+            playPoolTurnClickSound();
             hidePoolTurnToast(toast);
-            // The banner is a shortcut to the same fresh-status path the lobby
-            // button uses, so a tap can never land on a stale turn.
-            if (!challengeId) return;
+            if (!challengeId) {
+                // Never a dead click: with no id, ask the server which of this
+                // player's pool matches is actually on their turn.
+                void openMyLivePoolTurn();
+                return;
+            }
+            openPoolMatchById(challengeId);
+        }
+
+        // One click = one launch. Repeat taps while the status read is in
+        // flight are ignored instead of queueing a second arena.
+        function openPoolMatchById(challengeId) {
+            const id = String(challengeId || '');
+            if (!id) return;
+            if (poolTurnOpenInFlight) {
+                // A repeat tap on a launch that never completed (a dropped
+                // network read) must not be swallowed forever: allow a retry.
+                if (Date.now() - (Number(poolTurnOpenStartedAt) || 0) < 15000) return;
+            }
+            poolTurnOpenInFlight = true;
+            poolTurnOpenStartedAt = Date.now();
             selectedGameId = POOL_MATCH_GAME;
             selectedGameTitle = '8-Ball Pool';
-            poolStatusChallengeId = String(challengeId);
-            void checkPoolStatusNow(challengeId).catch(error => {
-                console.error('Could not open the pool turn from the banner:', error);
-                setStakeErr(error?.message || 'Could not open your 8-Ball turn.');
-            });
+            poolStatusChallengeId = id;
+            const badge = document.getElementById('arena-mode-badge');
+            if (badge) badge.textContent = 'Opening your 8-Ball table…';
+            // The banner is a shortcut to the same fresh-status path the lobby
+            // button uses, so a tap can never land on a stale turn.
+            Promise.resolve(checkPoolStatusNow(id))
+                .catch(error => {
+                    console.error('Could not open the pool turn from the banner:', error);
+                    setStakeErr(error?.message || 'Could not open your 8-Ball turn.');
+                })
+                .finally(() => { poolTurnOpenInFlight = false; poolTurnOpenStartedAt = 0; });
         }
+
+        // Fallback for a banner without a challenge id: find the player's own
+        // pool_matches row that is on their turn right now and open that.
+        async function openMyLivePoolTurn() {
+            if (poolTurnOpenInFlight && Date.now() - (Number(poolTurnOpenStartedAt) || 0) < 15000) return;
+            poolTurnOpenInFlight = true;
+            poolTurnOpenStartedAt = Date.now();
+            try {
+                const client = getSupabaseAuthClient();
+                if (!client || !activeUser?.id || activeUser.isGuest) return;
+                const { data, error } = await client
+                    .from('pool_matches')
+                    .select('*')
+                    .or(`player_a_id.eq.${activeUser.id},player_b_id.eq.${activeUser.id}`)
+                    .order('updated_at', { ascending: false })
+                    .limit(10)
+                    .withOptions({ cache: 'no-store' });
+                if (error) throw error;
+                const mine = (data || []).find(row => {
+                    const seat = poolRowSeatForMe(row);
+                    return seat >= 0 && !!row.player_b_id && !poolRowIsFinished(row)
+                        && Number(row.current_turn) === seat;
+                });
+                if (!mine) return;
+                const seat = poolRowSeatForMe(mine);
+                const myChallengeId = seat === 1 ? mine.player_b_challenge_id : mine.player_a_challenge_id;
+                openPoolMatchById(String(myChallengeId || mine.challenge_id || ''));
+            } catch (error) {
+                console.error('Could not find your live 8-Ball turn:', error);
+            } finally {
+                // Released here so the follow-up open is not blocked by this
+                // lookup; openPoolMatchById takes its own guard.
+                poolTurnOpenInFlight = false;
+                poolTurnOpenStartedAt = 0;
+            }
+        }
+        let poolTurnOpenStartedAt = 0;
 
         /* 5-minute deadline banner.
          *
@@ -9489,12 +9647,11 @@
             toast.style.transition = 'transform .2s ease-out, opacity .2s ease-out';
             toast.style.transform = 'translate3d(0,0,0)';
             toast.style.opacity = '1';
-            clearTimeout(Number(toast.dataset.timer) || 0);
             // A deadline warning is NOT dismissed on a timer: it stays until
-            // the player acts or swipes it away.
-            if (won || lost) {
-                toast.dataset.timer = String(setTimeout(() => hidePoolTurnToast(toast), 12000));
-            }
+            // the player acts or swipes it away. A decided outcome still
+            // clears itself after 12 s (through the same single timer).
+            if (won || lost) armPoolTurnAutoHide(toast, 12000);
+            else cancelPoolTurnAutoHide(toast);
         }
 
         /* SWIPE-UP TO DISMISS.
