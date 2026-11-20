@@ -191,23 +191,41 @@
         }
         #top-nav-bar { padding-top: max(0.75rem, env(safe-area-inset-top)); }
         #bottom-nav { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
-        /* The arena header sits flush under the phone's status/battery bar, so
-           the X (exit) button was cramped against the very top edge of the
-           screen and awkward to hit. Push the header below the notch/status
-           area and give the X its own breathing room (and a 44px tap target). */
+        /* Arena header + close (X).
+           Two failures to avoid: with no top padding the X sat ON the phone's
+           status/battery bar; with the old `env(safe-area-inset-top) + 16px`
+           on mobile (plus another 8px margin on the button itself) it dropped
+           so far down it looked detached from the header.
+
+           One offset now owns this: the header's top padding clears the
+           notch/status area with a fixed 12px of breathing room on top of the
+           safe area (never less than 12px on a phone with no inset). The X
+           itself sits on the header's own centre line -- no extra margin --
+           at 44px so it is a comfortable tap target. */
         #game-arena-header {
-            padding-top: calc(max(0.5rem, env(safe-area-inset-top, 0px)) + 10px);
-            padding-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            min-height: 64px;
+            padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px;
         }
         #arena-exit-btn {
-            width: 2.5rem;
-            height: 2.5rem;
-            margin-top: 6px;
+            width: 44px;
+            height: 44px;
+            margin-top: 0;
             flex: 0 0 auto;
         }
+        #arena-sound-btn,
+        #arena-pause-btn {
+            width: 40px;
+            height: 40px;
+            flex: 0 0 auto;
+        }
+        #arena-exit-btn i { font-size: 15px; }
         @media (max-width: 430px) {
-            #game-arena-header { padding-top: calc(env(safe-area-inset-top, 0px) + 16px); }
-            #arena-exit-btn { margin-top: 8px; }
+            /* Same single offset as the default rule: no extra margin, so the X
+               stays on the header line instead of being pushed down twice. */
+            #game-arena-header { min-height: 60px; padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px 10px; }
+            #arena-exit-btn { margin-top: 0; }
         }
         .game-filter-chip.active { background: #7c4dff; color: #fff; border-color: transparent; }
         #app-container { background: #090610; }
@@ -1227,6 +1245,32 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- RUN OVER: shown the moment the player fails, with the score
+                     already recorded. One tap starts another run; one tap goes
+                     back to the lobby. No restart loop, no dead arena. -->
+                <div id="run-result-overlay" class="absolute inset-0 z-40 hidden flex-col items-center justify-center bg-darkBg/95 p-6 text-center backdrop-blur-md">
+                    <div class="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-rose-400/30 bg-rose-400/20 text-2xl text-rose-300 shadow-lg shadow-rose-500/20">
+                        <i class="fa-solid fa-flag-checkered"></i>
+                    </div>
+                    <h3 id="run-result-title" class="text-lg font-black text-white">Run Over</h3>
+                    <p class="mt-1 text-xs text-slate-300">Your score was saved.</p>
+                    <div class="my-4 w-full max-w-xs rounded-xl border border-white/10 bg-cardBg p-3">
+                        <span class="block text-[10px] font-bold uppercase text-slate-400">Final Score</span>
+                        <span id="run-result-score" class="text-2xl font-mono font-extrabold text-accentGreen">0</span>
+                    </div>
+                    <p id="run-result-status" class="mb-4 text-[11px] font-semibold text-emerald-300">Saved</p>
+                    <div class="flex w-full max-w-xs flex-col gap-2.5">
+                        <button type="button" id="run-result-again-btn" onclick="playAgainFromRunResult()" class="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-500 py-3.5 text-xs font-extrabold text-[#08130e] shadow-lg shadow-emerald-500/20 transition hover:brightness-110">
+                            <i class="fa-solid fa-rotate-right"></i>
+                            <span>PLAY AGAIN</span>
+                        </button>
+                        <button type="button" onclick="exitArenaToLobby()" class="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-3 text-xs font-bold text-slate-300 transition hover:bg-white/10">
+                            <i class="fa-solid fa-house"></i>
+                            <span>Back to Lobby</span>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -2134,11 +2178,11 @@
             localStorage.setItem('oddzone-practice-scores', JSON.stringify(scores.slice(0, 50)));
         }
 
-        function markLocalPracticeScoreSynced(clientRunId) {
+        function markLocalPracticeScoreSynced(clientRunId, synced = true) {
             const scores = readLocalPracticeScores();
             const score = scores.find(item => item.clientRunId === clientRunId);
             if (!score) return;
-            score.practiceSynced = true;
+            score.practiceSynced = synced !== false;
             saveLocalPracticeScores(scores);
         }
 
@@ -5848,21 +5892,177 @@
             document.getElementById('matchmaking-check-pool-btn')?.classList.toggle('hidden', !poolStatusChallengeId);
         }
 
+        // "Check Game Status" is a deliberate request for the LIVE row, not for
+        // whatever this page last saw. It bypasses every cache (PostgREST's
+        // HTTP cache, the browser's, and the in-flight dedupe in the Supabase
+        // client) and re-reads pool_matches from the server, then drives the UI
+        // from that answer: it is my turn -> arena; their turn -> waiting; the
+        // rack finished -> the result.
+        //
+        // The old path went straight through openPoolMatchmaking(), which reads
+        // with the normal cacheable client. On a phone with a warm HTTP cache
+        // that returned the pre-hand-off row, so the player kept seeing
+        // "Waiting for <rival>" while their turn was actually live.
         function checkPoolGameStatusFromLobby() {
             const challengeId = poolStatusChallengeId;
             if (!challengeId) {
                 setStakeErr('No saved 8-Ball match to check yet. Start or join a match first.');
                 return;
             }
-            document.getElementById('matchmaking-modal')?.classList.add('hidden');
-            void openPoolMatchmaking(challengeId).catch(error => {
-                console.error('Could not check the pool match status:', error);
+            const btn = document.getElementById('matchmaking-check-pool-btn');
+            if (btn && btn.disabled) return;
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Checking…';
+            }
+            document.getElementById('matchmaking-modal')?.classList.remove('hidden');
+            showPoolLobbyStatus('Checking match status…', 'Reading your live 8-Ball turn from the server…', challengeId);
+            const restore = () => {
+                const button = document.getElementById('matchmaking-check-pool-btn');
+                if (button) {
+                    button.disabled = false;
+                    button.textContent = 'Check Game Status';
+                    button.classList.toggle('hidden', !poolStatusChallengeId);
+                }
+            };
+            void checkPoolStatusNow(challengeId)
+                .catch(error => {
+                    console.error('Could not check the pool match status:', error);
+                    showPoolLobbyStatus(
+                        'Pool match unavailable',
+                        error?.message || 'Could not reach the server. Tap Check Game Status to retry.',
+                        challengeId
+                    );
+                })
+                .finally(restore);
+        }
+
+        // A pool_matches read that cannot be served from any cache.
+        async function fetchPoolMatchFresh(client, challengeId) {
+            const { data, error } = await client
+                .from('pool_matches')
+                .select('*')
+                .or(`player_a_challenge_id.eq.${challengeId},player_b_challenge_id.eq.${challengeId}`)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .withOptions({ cache: 'no-store' });
+            if (error) throw error;
+            return (data && data[0]) || null;
+        }
+
+        // Same live read, by the SHARED match id (what the turn notifications
+        // carry), used by the banner countdown.
+        async function fetchPoolMatchBySharedId(client, matchId) {
+            const { data, error } = await client
+                .from('pool_matches')
+                .select('*')
+                .eq('challenge_id', String(matchId))
+                .maybeSingle()
+                .withOptions({ cache: 'no-store' });
+            if (error) throw error;
+            return data || null;
+        }
+
+        // My seat in a pool_matches row, or -1 when this player is not in it.
+        function poolRowSeatForMe(row, myId = String(activeUser?.id || '')) {
+            if (!row) return -1;
+            if (String(row.player_a_id) === myId) return 0;
+            if (String(row.player_b_id) === myId) return 1;
+            return -1;
+        }
+
+        function poolRowIsFinished(row) {
+            const status = String(row?.status || '').toLowerCase();
+            return status === 'completed'
+                || (row?.pending_winner_seat != null && !!row?.player_b_id);
+        }
+
+        // The user's "Check Game Status" / "Your Turn" click, resolved against
+        // a FRESH row. This is the single place that decides what the arena
+        // does next, so the banner tap and the lobby button cannot disagree.
+        async function checkPoolStatusNow(challengeId) {
+            const id = String(challengeId || '');
+            if (!id) throw new Error('No saved 8-Ball match to check.');
+            const client = getSupabaseAuthClient();
+            if (!client || !activeUser?.id) throw new Error('Sign in to check your 8-Ball match.');
+            const row = await fetchPoolMatchFresh(client, id);
+            if (!row) {
                 showPoolLobbyStatus(
                     'Pool match unavailable',
-                    error?.message || 'Could not reach the server. Tap Check Game Status to retry.',
-                    challengeId
+                    'This match could not be found. Refresh My Games or check your connection.',
+                    id
                 );
-            });
+                return null;
+            }
+            const seat = poolRowSeatForMe(row);
+            const myChallengeId = seat === 1 ? row.player_b_challenge_id : row.player_a_challenge_id;
+            const opponentJoined = !!row.player_b_id;
+            const myTurn = seat >= 0 && Number(row.current_turn) === seat;
+            if (poolRowIsFinished(row)) {
+                // The rack is decided: refresh the lobby card and stop offering
+                // a turn that no longer exists.
+                showPoolLobbyStatus(
+                    'Match complete',
+                    row.winner_id && String(row.winner_id) === String(activeUser.id)
+                        ? 'You won this 8-Ball match. The result is on My Games.'
+                        : 'This 8-Ball match has finished. The result is on My Games.',
+                    myChallengeId ? String(myChallengeId) : id
+                );
+                renderActiveChallenges();
+                return { row, seat, myTurn: false, finished: true };
+            }
+            if (!opponentJoined) {
+                showPoolLobbyStatus(
+                    'Result Waiting for Rival',
+                    'Your 8-ball result is saved. The match will settle when a rival accepts the challenge.',
+                    myChallengeId ? String(myChallengeId) : id
+                );
+                return { row, seat, myTurn, finished: false };
+            }
+            if (!myTurn) {
+                const opponentId = seat === 0 ? row.player_b_id : row.player_a_id;
+                const profile = await fetchOpponentProfile(opponentId);
+                showPoolLobbyStatus(
+                    `Waiting for ${profile.name === 'Opponent' ? 'your rival' : profile.name}`,
+                    'Your pool table is saved. You will be notified the moment your next turn is ready.',
+                    myChallengeId ? String(myChallengeId) : id
+                );
+                return { row, seat, myTurn: false, finished: false };
+            }
+            // It is my turn RIGHT NOW. Launch immediately -- no second read, no
+            // waiting screen, no banner tap.
+            await launchPoolTurnFromRow(row, seat, myChallengeId);
+            return { row, seat, myTurn: true, finished: false };
+        }
+
+        // Open the shared table for this player's seat, driven by a row we just
+        // read fresh. Kept separate from openPoolMatchmaking() so a status
+        // check never falls through to "start a new challenge".
+        async function launchPoolTurnFromRow(row, seat, myChallengeId) {
+            const challengeId = String(myChallengeId || (seat === 1 ? row.player_b_challenge_id : row.player_a_challenge_id));
+            const opponentId = seat === 0 ? row.player_b_id : row.player_a_id;
+            const profile = await fetchOpponentProfile(opponentId);
+            activeStakeChallenge = {
+                id: challengeId,
+                sharedMatchId: String(row.challenge_id),
+                myChallengeId: challengeId,
+                gameId: POOL_MATCH_GAME,
+                gameTitle: '8-Ball Pool',
+                status: 'matched',
+                opponentName: profile.name,
+                opponentId: opponentId || null,
+                opponentScoreWaiting: seat === 1
+            };
+            selectedGameId = POOL_MATCH_GAME;
+            selectedGameTitle = '8-Ball Pool';
+            poolStatusChallengeId = challengeId;
+            // Keep a live baseline for the banner's 5-minute countdown, and
+            // clear any stale "waiting" banner from the previous turn.
+            poolTurnBaselineByMatch = poolTurnBaselineByMatch || {};
+            poolTurnBaselineByMatch[String(row.challenge_id)] = poolTurnStartedAt(row);
+            hidePoolTurnToast();
+            closeMatchmakingModal();
+            launchGameModule('stake');
         }
 
         async function openPoolMatchmaking(challengeId = null) {
@@ -5871,6 +6071,20 @@
                 // Nobody to match with and nobody to bank a score for: a plain
                 // practice rack is the honest option, not a waiting room.
                 launchGameModule('free');
+                return;
+            }
+
+            // A match this player already owns: resolve it against a FRESH row
+            // so a warm HTTP cache can never keep the player on a stale
+            // "waiting" state when their turn has already begun.
+            if (challengeId) {
+                const resolved = await checkPoolStatusNow(challengeId);
+                if (resolved) return;
+                showPoolLobbyStatus(
+                    'Pool match unavailable',
+                    'This match could not be found. Refresh My Games or check your connection.',
+                    challengeId
+                );
                 return;
             }
 
@@ -6552,15 +6766,22 @@
                         }
 
                         const gameTitle = GAME_CATALOG.find(g => g.id === ch.game_id)?.title || ch.game_id;
-                        const encoded = btoa(encodeURIComponent(JSON.stringify(ch)));
-                        const openAction = poolMatch && ch.game_id === '8ball'
-                            ? `openPoolMatchmaking('${String(ch.id)}')`
-                            : `showMatchResultFromStr('${encoded}')`;
+                        // Opening a challenge must work on the FIRST tap.
+                        //
+                        // The row used to be an inline onclick that carried the
+                        // whole challenge as base64, which is both double-quote
+                        // hostile and can be swallowed by the 300ms tap delay a
+                        // mobile browser applies to a newly-rendered element.
+                        // The row is now a real button: the challenge id is
+                        // stored in a data attribute and resolved by a delegated
+                        // listener, so no tap is lost and no encoding can break
+                        // the handler.
+                        const isPoolRow = !!poolMatch && ch.game_id === '8ball';
 
-                        return `<div onclick="${openAction}" class="flex items-center justify-between gap-3 rounded-xl border ${displayStatus === 'Your Turn!' ? 'border-emerald-300/40 bg-emerald-400/10' : 'border-white/10 bg-cardBg'} px-4 py-3 cursor-pointer hover:bg-white/5 transition">
+                        return `<button type="button" data-challenge-id="${String(ch.id)}" data-pool-row="${isPoolRow ? '1' : '0'}" class="w-full text-left flex items-center justify-between gap-3 rounded-xl border ${displayStatus === 'Your Turn!' ? 'border-emerald-300/40 bg-emerald-400/10' : 'border-white/10 bg-cardBg'} px-4 py-3 cursor-pointer hover:bg-white/5 transition touch-manipulation" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent">
                             <div class="min-w-0"><p class="truncate text-xs font-bold">${gameTitle}</p><p class="mt-0.5 text-[10px] text-slate-400">₦${Number(ch.stake).toLocaleString()} stake</p></div>
                             <span class="shrink-0 text-[10px] font-bold ${statusColor}">${displayStatus}</span>
-                        </div>`;
+                        </button>`;
                     }).join('');
                 })
                 .catch(error => {
@@ -6568,6 +6789,92 @@
                     container.innerHTML = '<p class="text-xs text-rose-300">Could not load active matches. Check your connection and try again.</p>';
                 });
         }
+
+        // One delegated listener for every challenge row, installed once.
+        //
+        // Rows are re-rendered constantly (realtime, poll, tab switch), so a
+        // per-row listener would be rebound dozens of times; a delegated
+        // handler on the document survives every re-render. `pointerdown` is
+        // what opens the challenge, not `click`: on mobile a click can be
+        // dropped by the 300ms delay or suppressed by the previous scroll, and
+        // that is exactly the "tap does nothing until you press X" symptom.
+        // A short guard keeps pointerdown + click from opening it twice.
+        let lastChallengeOpenAt = 0;
+        function openChallengeRow(target) {
+            const row = target?.closest?.('[data-challenge-id]');
+            if (!row) return false;
+            const id = row.getAttribute('data-challenge-id');
+            if (!id) return false;
+            const now = Date.now();
+            if (now - lastChallengeOpenAt < 700) return true;
+            lastChallengeOpenAt = now;
+            // Close the list so the open challenge is what the player sees.
+            closeAllChallenges();
+            if (row.getAttribute('data-pool-row') === '1') {
+                // A pool row is a live table: resolve it against a fresh turn
+                // row rather than replaying the snapshot the card was built
+                // from (which may already be one turn out of date).
+                selectedGameId = POOL_MATCH_GAME;
+                selectedGameTitle = '8-Ball Pool';
+                poolStatusChallengeId = String(id);
+                void checkPoolStatusNow(id).catch(error => {
+                    console.error('Could not open the 8-Ball challenge:', error);
+                    setStakeErr(error?.message || 'Could not open this 8-Ball challenge.');
+                });
+                return true;
+            }
+            void openChallengeById(id);
+            return true;
+        }
+
+        // Read the challenge fresh and hand it to showMatchResultFromStr(), so
+        // opening never depends on the snapshot embedded when the list rendered.
+        async function openChallengeById(challengeId) {
+            const client = getSupabaseAuthClient();
+            if (!client || !activeUser?.id) {
+                setStakeErr('Sign in to open this challenge.');
+                return;
+            }
+            try {
+                const { data, error } = await client
+                    .from('stake_challenges')
+                    .select('*')
+                    .eq('id', String(challengeId))
+                    .eq('user_id', activeUser.id)
+                    .maybeSingle()
+                    .withOptions({ cache: 'no-store' });
+                if (error) throw error;
+                if (!data) throw new Error('This challenge is no longer available.');
+                if (data.game_id === '8ball') {
+                    selectedGameId = POOL_MATCH_GAME;
+                    selectedGameTitle = '8-Ball Pool';
+                    await checkPoolStatusNow(String(challengeId));
+                    return;
+                }
+                await showMatchResultFromStr(btoa(encodeURIComponent(JSON.stringify(data))));
+            } catch (error) {
+                console.error('Could not open the challenge:', error);
+                setStakeErr(error?.message || 'Could not open this challenge.');
+            }
+        }
+
+        // Installed once: capture phase, so nothing inside the row can stop it.
+        function installChallengeRowHandler() {
+            if (window.__oddzoneChallengeRowsBound) return;
+            window.__oddzoneChallengeRowsBound = true;
+            const onActivate = event => {
+                if (event.type === 'pointerdown' && event.button != null && event.button > 0) return;
+                openChallengeRow(event.target);
+            };
+            document.addEventListener('pointerdown', onActivate, { capture: true, passive: true });
+            document.addEventListener('keydown', event => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                if (!event.target?.closest?.('[data-challenge-id]')) return;
+                event.preventDefault();
+                openChallengeRow(event.target);
+            }, { capture: true });
+        }
+        installChallengeRowHandler();
 
         async function showMatchResultFromStr(encoded) {
             try {
@@ -6888,14 +7195,19 @@
         }
 
         let pendingLaunchInfo = null;
+        // The mode the current arena run was launched in. "Play Again" reuses
+        // it so a free run stays free and a practice run stays practice.
+        let pendingLaunchMode = 'free';
 
         function startArenaMatchNow() {
             const overlay = document.getElementById('arena-tap-to-start-overlay');
             if (overlay) overlay.classList.add('hidden');
             if (!pendingLaunchInfo) return;
             const { mode, gameId } = pendingLaunchInfo;
-            const isTimedMode = mode === 'practice' || mode === 'stake';
-            if (isTimedMode) {
+            const isTimedMode = mode === 'practice' || mode === 'stake' || mode === 'free';
+            // Never start a second clock for the same run: the caller usually
+            // started it already, and a duplicate would reset the score/deadline.
+            if (isTimedMode && !(activeTimedMatch && !activeTimedMatch.completed && activeTimedMatch.gameId === gameId)) {
                 startTimedMatch(mode, null, gameId);
             }
             try {
@@ -7092,6 +7404,11 @@
             const game = GAME_CATALOG.find(candidate => candidate.id === selectedGameId);
             if (!game) return;
 
+            // A launch always supersedes whatever the previous one left behind:
+            // a stale pendingLaunchInfo would start a timed match for the OLD
+            // game id the moment the new frame loaded.
+            pendingLaunchInfo = null;
+            pendingLaunchMode = mode;
             pendingLaunchInfo = { mode, gameId: game.id };
 
             // External games open in the iframe
@@ -7105,8 +7422,13 @@
                 // would escape the project directory on GitHub Pages.
                 document.getElementById('game-iframe').src = resolveGameUrl(game.url);
                 document.getElementById('game-arena-modal').classList.remove('hidden');
+                // External modules start as soon as they load; the player is
+                // never parked on a start overlay first.
                 const overlay = document.getElementById('arena-tap-to-start-overlay');
-                if (overlay) overlay.classList.remove('hidden');
+                if (overlay) overlay.classList.add('hidden');
+                pendingLaunchInfo = { mode, gameId: game.id };
+                pendingLaunchMode = mode;
+                startTimedMatch(mode, null, game.id);
                 return;
             }
 
@@ -7134,13 +7456,23 @@
         }
 
         function startArenaLaunch(game, mode, launchToken) {
-            const isTimedMode = mode === 'practice' || mode === 'stake';
-            pendingTimedMatchMode = isTimedMode ? mode : null;
+            // Every arena run is a timed run, free play included. A free rack
+            // with no clock had no header score and no result to record: the
+            // player could lose and nothing was ever banked. Free play now uses
+            // the same 2-minute run clock as practice, so the header score is
+            // live and a loss submits the score automatically.
+            const isTimedMode = true;
+            pendingTimedMatchMode = mode;
+            // 8-Ball keeps its own HUD; every other game shows the header
+            // scoreboard with the LIVE score, which is what the player watches.
+            document.getElementById('game-scoreboard').classList.toggle('hidden', game.id === '8ball');
             const badgeLabel = game.id === '8ball'
                 ? (mode === 'practice' ? '1-Minute Practice' : mode === 'stake' ? '1-Minute Run · async 1v1' : 'Free Play')
-                : (mode === 'practice' ? '2-Minute Practice' : mode === 'stake' ? '1v1 Stake Duel' : 'Free Play');
+                : (mode === 'practice' ? '2-Minute Practice' : mode === 'stake' ? '1v1 Stake Duel' : '2-Minute Run');
             document.getElementById('arena-game-title').innerText = game.title;
             document.getElementById('arena-mode-badge').innerText = badgeLabel;
+            pendingLaunchMode = mode;
+            hideRunResultOverlay();
             document.getElementById('external-game-container').classList.remove('hidden');
             document.getElementById('game-iframe').classList.add('hidden');
             document.getElementById('oddzone-game-frame').classList.remove('hidden');
@@ -7149,7 +7481,10 @@
             frame.onload = async () => {
                 let href = '';
                 try { href = frame.contentWindow?.location?.href || ''; } catch (e) {}
-                if (gameLaunchToken !== launchToken || selectedGameId !== game.id || href === 'about:blank') return;
+                // A blank/unloaded document is not this game: never start a
+                // run for it (that is how "Play Again" finished instantly).
+                if (!href || href === 'about:blank') return;
+                if (gameLaunchToken !== launchToken || selectedGameId !== game.id) return;
                 // GitHub Pages serves 404.html for a missing file. The load even
                 // still fires and no `error` event ever does, so without this
                 // check the player would get the 404 page with a "TAP TO START"
@@ -7164,9 +7499,19 @@
                     showGameLoadError(game, `The server returned its 404 page for ${game.path}.`);
                     return;
                 }
-                // Show Tap-to-Start overlay instead of starting immediately
-                const overlay = document.getElementById('arena-tap-to-start-overlay');
-                if (overlay) overlay.classList.remove('hidden');
+                // Go STRAIGHT into play. The old flow forced the player to
+                // press "Tap to Start" on an overlay before the module would
+                // even begin -- and a module that could not accept the start
+                // message left them staring at it. The module is started now,
+                // as soon as it has loaded, and play begins on its own.
+                pendingLaunchInfo = { mode, gameId: game.id };
+                pendingTimedMatchMode = mode;
+                // The arena clock starts BEFORE the start hand-off starts the
+                // game. A module can report its very first loss within a few
+                // frames of starting; with the clock created afterwards that
+                // result landed on a null activeTimedMatch and was dropped.
+                startTimedMatch(mode, null, game.id);
+                startArenaMatchNow();
             };
             frame.src = `${encodeURI(buildGameUrl(game.path))}?${buildGameQuery(game, mode)}`;
             document.getElementById('game-arena-modal').classList.remove('hidden');
@@ -7349,31 +7694,24 @@
             return Math.max(bankedGameScore, live);
         }
 
-        // A 2-minute run is meant to last 2 minutes. Dying in these arcade
-        // games used to end the whole match instantly and bank a 0.
-        // Instead: bank what was earned, restart the game, and keep going.
+        // A loss now ends the run and submits the score IMMEDIATELY.
+        //
+        // This used to bank the score and silently restart the game for the
+        // whole remaining clock, so a player who crashed never saw a result
+        // and their score was never recorded. Failing *is* the result:
+        // finalise the match here, and the post-game screen offers another run.
         function handleGameOverInsideRun() {
-            if (!activeTimedMatch || activeTimedMatch.ending) return;
-            // The game stays "over" until it restarts, and it also posts its own
-            // game-complete message, so ignore repeat reports for the same death.
+            if (!activeTimedMatch || activeTimedMatch.ending || activeTimedMatch.completed) return;
             if (activeTimedMatch.awaitingRestart) return;
-
             const finalScore = readTimedGameScore();
             bankedGameScore = finalScore;
             activeGameScore = finalScore;
             updateScoreboard(finalScore);
-
-            // Finalise a stake duel the moment the player dies — there is no
-            // score left to protect by continuing.
-            if (activeTimedMatch.mode === 'stake') {
-                endTimedMatch();
-                return;
-            }
-
-            activeTimedMatch.awaitingRestart = true;
-            activeTimedMatch.restarts = (activeTimedMatch.restarts || 0) + 1;
-            showGameOverBanner();
-            restartGameAfterLoss();
+            activeTimedMatch.lost = true;
+            // Free play and practice: endTimedMatch() banks and records the
+            // score on the spot (recordFreeRunScore / savePracticeScore). Stake
+            // duels settle through the challenge, exactly as before.
+            endTimedMatch();
         }
 
         function updateScoreboard(score) {
@@ -7449,7 +7787,7 @@
             // player's first shot, never on load and never while a rival is
             // still connecting. The game calls __oddzoneStart()/reports the
             // first shot and releaseHeldMatch() takes it from there.
-            const holdForOpponent = (mode === 'stake' && !!matchId && isLiveDuelGame(gameId) && !pairMatchId)
+            const holdForOpponent = (mode === 'stake' && !!matchId && isLiveDuelGame(gameId))
                 || (gameId === '8ball' && (mode === 'stake' || mode === 'practice'));
             activeTimedMatch = {
                 mode,
@@ -7461,19 +7799,21 @@
                 ending: false,
                 completed: false,
                 restarts: 0,
-                pairMatchId
+                pairMatchId: null
             };
             document.getElementById('scoreboard-mode').innerText = gameId === '8ball' ? '1-Minute Run' : '2-Minute Match';
             document.getElementById('scoreboard-player').innerText = activeUser.name;
             document.getElementById('match-score').innerText = activeGameScore.toLocaleString();
             document.getElementById('match-timer').innerText = formatRunDuration();
+            // Every non-pool run shows the live header score; the pool module
+            // draws its own HUD on the table.
             document.getElementById('game-scoreboard').classList.toggle('hidden', gameId === '8ball');
             if (holdForOpponent) {
                 document.getElementById('arena-mode-badge').innerText = 'Waiting for opponent…';
                 document.getElementById('match-timer').classList.add('held');
                 return;   // no interval yet — the clock starts in releaseHeldMatch()
             }
-            if (pairMatchId) {
+            if (activeTimedMatch.pairMatchId) {
                 // The clock is the player's own run, not a countdown to an
                 // opponent: say so, and keep it in live green.
                 document.getElementById('arena-mode-badge').innerText = '1v1 Stake Duel · Your run';
@@ -7501,6 +7841,9 @@
 
         // The module's run has begun (its first shot): release the arena clock.
         function releasePoolRunClock() {
+            // Only an 8-Ball match has a held pool clock. Returning false for
+            // every other game is what let a non-pool run stay "held" forever:
+            // the run clock never started and the match was never finalised.
             if (!activeTimedMatch || activeTimedMatch.gameId !== '8ball') return false;
             if (!activeTimedMatch.held) return false;
             const info = readPoolRunInfo();
@@ -7581,7 +7924,15 @@
             const liveScore = readActiveGameScore();
             if (liveScore > bankedGameScore) bankedGameScore = liveScore;
             activeGameScore = bankedGameScore;
+            // The header must always show the score as it is earned -- both the
+            // big number and the mode line's running total.
             updateScoreboard(activeGameScore);
+            if (activeTimedMatch.gameId !== '8ball' && !activeTimedMatch.lost) {
+                const modeEl = document.getElementById('scoreboard-mode');
+                if (modeEl) {
+                    modeEl.innerText = activeTimedMatch.mode === 'stake' ? '1v1 Stake Duel' : '2-Minute Match';
+                }
+            }
 
             if (checkActiveGameLoss()) {
                 handleGameOverInsideRun();
@@ -7630,7 +7981,9 @@
             const finalScore = Math.max(bankedGameScore, liveScore);
             activeGameScore = finalScore;
             bankedGameScore = finalScore;
-            finishTimedMatch(finalScore);
+            finishTimedMatch(finalScore).catch(error => {
+                console.error('Could not finalise the timed match:', error);
+            });
         }
 
         async function finishTimedMatch(score) {
@@ -7641,6 +7994,7 @@
             const completedAt = new Date().toISOString();
             const matchMode = activeTimedMatch.mode;
             const matchGameId = activeTimedMatch.gameId;
+            const activeTimedMatchLost = activeTimedMatch.lost === true;
             if (matchMode === 'stake' && matchGameId === '8ball') {
                 const frame = document.getElementById('oddzone-game-frame');
                 try {
@@ -7799,9 +8153,159 @@
                     durationSeconds: 120,
                     completedAt
                 });
+                showRunResultOverlay(score, activeTimedMatchLost);
+            } else if (matchMode === 'free') {
+                // Free play has no stake to settle, but the run still counts:
+                // record it so it shows in Recent Activity, the profile and the
+                // leaderboard immediately. Without this a free-play run (and
+                // every run that ENDED because the player crashed) vanished.
+                await recordFreeRunScore(score, matchGameId);
+                showRunResultOverlay(score, activeTimedMatchLost);
             } else {
                 console.error('Unsupported timed match mode:', matchMode);
             }
+        }
+
+        // A free-play run is banked the same way a practice run is, but is
+        // labelled as free play in the history so the two never mix up.
+        async function recordFreeRunScore(score, gameId) {
+            const finalScore = Math.max(0, Math.floor(Number(score) || 0));
+            const history = readPracticeScores();
+            const entry = {
+                clientRunId: createStakeRequestId(),
+                practiceSynced: false,
+                game: GAME_CATALOG.find(game => game.id === gameId)?.title || 'Arcade Game',
+                gameId,
+                mode: 'free',
+                playerName: activeUser?.name || 'Player',
+                playerEmail: activeUser?.email || '',
+                score: finalScore,
+                durationSeconds: 120,
+                completedAt: new Date().toISOString()
+            };
+            saveLocalPracticeScores([entry, ...history].slice(0, 200));
+            markLocalPracticeScoreSynced(entry.clientRunId, false);
+            const badge = document.getElementById('arena-mode-badge');
+            if (badge) badge.innerText = `Score saved · ${finalScore.toLocaleString()} pts`;
+            renderDashboardScores();
+            renderLocalScores();
+            renderLocalScoreLeaderboard();
+            renderProfileStats();
+            renderProfileRecentActivity();
+            updatePracticeDashboard();
+            if (!activeUser?.id || activeUser.isGuest) return;
+            const client = getSupabaseAuthClient();
+            if (!client) return;
+            try {
+                const { error } = await client.rpc('record_practice_score', {
+                    p_client_run_id: entry.clientRunId,
+                    p_game_id: String(gameId || 'arcade'),
+                    p_score: finalScore,
+                    p_duration_seconds: 120
+                });
+                if (error) throw error;
+                markLocalPracticeScoreSynced(entry.clientRunId);
+                practiceLeaderboardCache.clear();
+            } catch (error) {
+                // The local entry is already recorded; the next sign-in retries.
+                console.warn('Could not record the free-play score on the server:', error);
+            }
+        }
+
+        // The end-of-run card for free play and practice. It replaces the old
+        // behaviour of silently restarting the game: the player sees the score
+        // that was just recorded and decides what happens next.
+        function showRunResultOverlay(score, lost) {
+            // Never leave a game's own frozen end screen visible under the
+            // cards: it offers a "tap to retry" that belongs to the old run.
+            hideGameOwnEndScreen();
+            const overlay = document.getElementById('run-result-overlay');
+            if (!overlay) return;
+            const scoreEl = document.getElementById('run-result-score');
+            if (scoreEl) scoreEl.textContent = Number(score || 0).toLocaleString();
+            const titleEl = document.getElementById('run-result-title');
+            if (titleEl) titleEl.textContent = lost ? 'Run Over' : 'Time Up';
+            const subEl = overlay.querySelector('p');
+            if (subEl) subEl.textContent = lost ? 'You lost this run — your score was saved.' : 'Your run finished — your score was saved.';
+            const statusEl = document.getElementById('run-result-status');
+            if (statusEl) {
+                statusEl.textContent = activeUser?.id && !activeUser.isGuest
+                    ? 'Saved to your account'
+                    : 'Saved on this device';
+            }
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+        }
+
+        function hideRunResultOverlay() {
+            const overlay = document.getElementById('run-result-overlay');
+            if (!overlay) return;
+            overlay.classList.add('hidden');
+            overlay.classList.remove('flex');
+        }
+
+        // Modules draw their own "game over" panels (Cave Runner's
+        // #game-over-modal, Star Shooter's #gameOverScreen, Pipe Hopper's canvas
+        // banner...). Once the arena's result card is up, that panel is a
+        // second, stale control surface -- and its "retry" button does nothing
+        // for the run. Hide it for the current frame only; a fresh launch
+        // reloads the document and restores it.
+        function hideGameOwnEndScreen() {
+            const frame = document.getElementById('oddzone-game-frame');
+            try {
+                const doc = frame?.contentDocument;
+                if (!doc) return;
+                ['game-over-modal', 'gameOverScreen', 'gameoverscreen', 'menu'].forEach(id => {
+                    const el = doc.getElementById(id);
+                    if (!el) return;
+                    // `menu` is Cave Runner's/ Rail Runner's start menu: only hide
+                    // it when the module is genuinely showing its end state.
+                    if (id === 'menu' && !doc.getElementById('game-over-modal')) return;
+                    el.style.display = 'none';
+                });
+            } catch (error) { /* cross-origin module: nothing to hide */ }
+        }
+
+        // "Play Again": same game, same mode, straight back into a live run --
+        // never back to a menu.
+        function playAgainFromRunResult() {
+            hideRunResultOverlay();
+            const gameId = selectedGameId;
+            if (!gameId || gameId === '8ball') {
+                void openPoolMatchmaking();
+                return;
+            }
+            // A game that has finished often freezes its own loop (and may post
+            // a final result). Re-entering the SAME document made "Play Again"
+            // land straight back on its game-over screen, so the module is
+            // loaded fresh: clear the frame first, then launch.
+            resetGameFrame();
+            // Populate the launch info synchronously: the game start is
+            // triggered by the frame's own load, not by the launch caller.
+            selectedGameId = gameId;
+            launchGameModule(pendingLaunchMode || 'free');
+        }
+
+        // Unload whatever module is in the launch frame so the next launch
+        // starts from a clean document (no finished loop, no stale globals).
+        // The load handler is NOT cleared here: the launch that follows assigns
+        // its own, and leaving this frame's handler in place let the blank
+        // about:blank document trigger a start for the OLD run.
+        function resetGameFrame() {
+            clearInterval(matchTimerInterval);
+            clearTimeout(matchFinishFallback);
+            clearTimeout(gameRestartTimer);
+            clearTimeout(gameOverBannerTimer);
+            activeTimedMatch = null;
+            const frame = document.getElementById('oddzone-game-frame');
+            if (!frame) return;
+            const previousToken = gameLaunchToken;
+            frame.onload = null;
+            frame.onerror = null;
+            try { frame.src = 'about:blank'; } catch (error) { /* ignore */ }
+            // The next launch bumps gameLaunchToken itself; this keeps the
+            // frame from being treated as "still mounted" in between.
+            if (gameLaunchToken === previousToken) gameLaunchToken++;
         }
 
         async function retryStakeScoreSubmission() {
@@ -7873,9 +8377,21 @@
                 if (scoreEl) scoreEl.textContent = Number(curScore).toLocaleString();
                 document.getElementById('stake-exit-confirm-modal')?.classList.remove('hidden');
             } else {
+                // A free or practice run that is still going has a score worth
+                // keeping: close via the banked result, not by silently
+                // throwing the run away.
+                if (activeTimedMatch && !activeTimedMatch.completed && !activeTimedMatch.ending
+                    && (activeTimedMatch.mode === 'free' || activeTimedMatch.mode === 'practice')) {
+                    endTimedMatch();
+                    return;
+                }
                 closeGameArena();
             }
         }
+
+        // The X inside a game ends the run; the player must always be able to
+        // reach the lobby from it, whoever posted it.
+        window.handleArenaCloseClick = handleArenaCloseClick;
 
         function closeStakeExitConfirm() {
             document.getElementById('stake-exit-confirm-modal')?.classList.add('hidden');
@@ -7910,8 +8426,12 @@
             activeTimedMatch = null;
             pendingTimedMatchMode = null;
             isGamePaused = false;
+            // The arena is gone: the banner (and its countdown) belongs to the
+            // lobby, not to a table the player has left.
+            stopPoolTurnCountdown();
             document.getElementById('arena-pause-overlay')?.classList.add('hidden');
             document.getElementById('stake-exit-confirm-modal')?.classList.add('hidden');
+            hideRunResultOverlay();
             const pauseIcon = document.getElementById('arena-pause-icon');
             if (pauseIcon) pauseIcon.className = 'fa-solid fa-pause text-xs';
             document.getElementById('game-scoreboard').classList.add('hidden');
@@ -7958,9 +8478,16 @@
         window.addEventListener('message', (event) => {
             if (!event.data || typeof event.data !== 'object') return;
             const gameFrame = document.getElementById('oddzone-game-frame');
-            if (!gameFrame?.contentWindow || event.source !== gameFrame.contentWindow) return;
+            // Only a frame we started may drive the arena. `event.source` is
+            // matched against BOTH the module frame and the external-game
+            // iframe, because a re-launch swaps which one is on screen and a
+            // message from the previous one is still a genuine result.
+            const extFrame = document.getElementById('game-iframe');
+            const fromModule = !!gameFrame?.contentWindow && event.source === gameFrame.contentWindow;
+            const fromExternal = !!extFrame?.contentWindow && event.source === extFrame.contentWindow;
+            if (!fromModule && !fromExternal) return;
 
-            if (event.data.type === 'oddzone:pool-check-status') {
+        if (event.data.type === 'oddzone:pool-check-status') {
                 clearInterval(matchTimerInterval);
                 clearTimeout(matchFinishFallback);
                 activeTimedMatch = null;
@@ -7976,7 +8503,7 @@
                     checkBtn.textContent = 'Checking…';
                 }
                 showPoolLobbyStatus('Checking match status…', 'Looking up your saved 8-Ball table…', requestedId);
-                Promise.resolve(openPoolMatchmaking(requestedId))
+                Promise.resolve(checkPoolStatusNow(requestedId))
                     .catch(error => {
                         console.error('[OddZone] pool status check failed:', error);
                         setStakeErr(error?.message || 'Could not check the match status. Tap Check Game Status to retry.');
@@ -8055,6 +8582,18 @@
                 return;
             }
             if (!activeTimedMatch) {
+                const lateType = String(event.data.type || '');
+                const looksLikeEnd = lateType === 'oddzone:game-complete'
+                    || lateType === 'oddzone:game-over'
+                    || lateType === 'oddzone:gameover'
+                    || lateType === 'gameOver';
+                // A result that arrives AFTER the arena already finalised the
+                // run (the message was queued behind oddzone:end()) must not
+                // reopen or overwrite anything -- but it also must not be
+                // silently dropped when nothing was recorded at all.
+                if (looksLikeEnd) {
+                    console.warn('[OddZone] late game result ignored (run already finalised):', event.data.score);
+                }
                 return;
             }
 
@@ -8095,7 +8634,7 @@
                 preRunScoreIgnored = true;
                 // 8-Ball: the player took their first shot, so the one minute
                 // starts now. Sent by the module in addition to first-shot.
-                releasePoolRunClock();
+                if (activeTimedMatch && activeTimedMatch.gameId === '8ball') releasePoolRunClock();
             } else if (event.data.type === 'oddzone:first-shot') {
                 // The module is playing a real rack now: bank its counter.
                 preRunScoreIgnored = true;
@@ -8502,6 +9041,108 @@
 
         let poolTurnNotificationsChannel = null;
 
+        /* ── POOL TURN BANNER: 5-MINUTE COUNTDOWN ──────────────────────────
+         *
+         * The banner carries a live countdown of the player's own 5-minute
+         * turn window (the same window expire_pool_turn_duels() forfeits on).
+         * The clock is anchored to the SERVER's turn_started_at, never to when
+         * this page happened to open, so a phone that was asleep for four
+         * minutes still shows one minute left -- not five.
+         *
+         * poolTurnStartedAt() is the local fallback for a row that has not been
+         * stamped yet; once the server start time is known it always wins.
+         */
+        const POOL_TURN_LIMIT_MS = 5 * 60 * 1000;
+        let poolTurnBaselineByMatch = {};
+        let poolTurnCountdownTimer = null;
+        let poolTurnToastDeadlineAt = 0;
+
+        function poolTurnStartedAt(row) {
+            if (!row) return 0;
+            const candidates = [row.turn_started_at, row.started_at];
+            if (Array.isArray(row.turn_history) && row.turn_history.length) {
+                candidates.push(row.turn_history[row.turn_history.length - 1]?.at);
+            }
+            candidates.push(row.created_at);
+            for (const value of candidates) {
+                const at = Date.parse(String(value || ''));
+                if (Number.isFinite(at)) return at;
+            }
+            return Date.now();
+        }
+
+        // Seconds left on this player's turn window, from the best clock we
+        // have. Deadlines in the future mean a new turn: re-anchor.
+        function poolTurnSecondsLeft(matchId) {
+            const key = String(matchId || '');
+            const start = Number(poolTurnBaselineByMatch?.[key] || 0);
+            if (!start) return POOL_TURN_LIMIT_MS / 1000;
+            return Math.max(0, Math.ceil((start + POOL_TURN_LIMIT_MS - Date.now()) / 1000));
+        }
+
+        function formatPoolCountdown(seconds) {
+            const safe = Math.max(0, Math.floor(Number(seconds) || 0));
+            return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, '0')}`;
+        }
+
+        // Refresh the baseline from the authoritative row before showing the
+        // banner, so the countdown is the server's, not this device's guess.
+        async function syncPoolTurnBaseline(matchId) {
+            const key = String(matchId || '');
+            if (!key) return 0;
+            if (!poolTurnBaselineByMatch[key]) poolTurnBaselineByMatch[key] = Date.now();
+            const client = getSupabaseAuthClient();
+            if (!client || !activeUser?.id || activeUser.isGuest) return poolTurnSecondsLeft(key);
+            try {
+                let row = null;
+                if (/^[0-9a-f-]{36}$/i.test(key)) {
+                    // The notification carries OUR challenge id; the shared
+                    // match row is found from either seat's id.
+                    row = await fetchPoolMatchFresh(client, key);
+                } else {
+                    row = await fetchPoolMatchBySharedId(client, key);
+                }
+                if (row) {
+                    const started = poolTurnStartedAt(row);
+                    // Only accept a start that is not in the future and not
+                    // absurdly old (a clock-skewed device would otherwise pin
+                    // the banner at 0:00 forever).
+                    const age = Date.now() - started;
+                    if (age >= -60000 && age <= POOL_TURN_LIMIT_MS + 60000) {
+                        poolTurnBaselineByMatch[key] = started;
+                        if (row.challenge_id) poolTurnBaselineByMatch[String(row.challenge_id)] = started;
+                    }
+                }
+            } catch (error) {
+                console.warn('Could not read the pool turn clock:', error);
+            }
+            return poolTurnSecondsLeft(key);
+        }
+
+        function stopPoolTurnCountdown() {
+            clearInterval(poolTurnCountdownTimer);
+            poolTurnCountdownTimer = null;
+        }
+
+        // Paint (and keep painting) the countdown into the banner.
+        function startPoolTurnCountdown() {
+            const toast = document.getElementById('pool-turn-toast');
+            if (!toast) return;
+            const clock = toast.querySelector('.pool-turn-toast-clock');
+            if (!clock) return;
+            stopPoolTurnCountdown();
+            const paint = () => {
+                if (!toast.classList.contains('hidden')) {
+                    toast.dataset.turnSeconds = String(poolTurnSecondsLeft(toast.dataset.matchId));
+                }
+                const seconds = Number(toast.dataset.turnSeconds || 0);
+                clock.textContent = formatPoolCountdown(seconds);
+                clock.style.color = seconds <= 60 ? '#f87171' : seconds <= 120 ? '#fbbf24' : '#a7f3d0';
+            };
+            paint();
+            poolTurnCountdownTimer = setInterval(paint, 1000);
+        }
+
         // Hide the pool-turn banner immediately, whatever animation is running.
         //
         // The banner is anchored with `left:50%` and centred by its OWN
@@ -8519,6 +9160,10 @@
             if (!toast) return;
             clearTimeout(Number(toast.dataset.timer) || 0);
             swallowNextClick(toast);
+            // The countdown belongs to a visible banner; stop ticking it. It is
+            // restarted from the SERVER clock the next time this banner is
+            // raised, so a dismissed banner can never come back stale.
+            stopPoolTurnCountdown();
             // Travel at least its own height plus its top offset, so the card is
             // fully gone rather than peeking back in.
             const height = toast.offsetHeight || 72;
@@ -8601,6 +9246,12 @@
 
         function showPoolTurnToast(notification) {
             if (!notification?.challenge_id) return;
+            // Already at the table: the turn is being played, not pending.
+            if (activeTimedMatch && activeTimedMatch.gameId === '8ball') return;
+            // Keep listening for the NEXT hand-off onto this seat, so a swipe-up
+            // hides this turn only and the rival's next finish re-raises it.
+            const watchMatchId = notification.match_id || notification.source_challenge_id || notification.challenge_id;
+            if (watchMatchId) watchPoolTurnForMatch(watchMatchId);
             let toast = document.getElementById('pool-turn-toast');
             if (!toast) {
                 toast = document.createElement('div');
@@ -8624,14 +9275,32 @@
                     if (isSwipeGuardActive(toast)) return;
                     openPoolTurnToast(toast);
                 });
+                // A small clock pill inside the banner: the player can see how
+                // long is left on their turn without opening the table.
+                const clock = document.createElement('span');
+                clock.className = 'pool-turn-toast-clock';
+                clock.setAttribute('aria-hidden', 'true');
+                clock.style.pointerEvents = 'none';
+                text.append(clock);
                 toast.append(text, button);
                 document.body.appendChild(toast);
                 attachPoolToastSwipe(toast);
             }
             applyToastStyles(toast);
             toast.dataset.challengeId = String(notification.challenge_id);
+            toast.dataset.matchId = String(notification.match_id || notification.source_challenge_id || notification.challenge_id || '');
             toast.dataset.swipeGuard = '0';
-            toast.querySelector('.pool-turn-toast-text').textContent = 'Your Turn! Your 8-Ball Pool opponent has finished their turn.';
+            resetPoolToastAccent(toast);
+            const textEl = toast.querySelector('.pool-turn-toast-text');
+            // The clock is a child of the text node, so set the copy first and
+            // re-append the clock (textContent would wipe it out).
+            const clockEl = textEl.querySelector('.pool-turn-toast-clock');
+            textEl.textContent = 'Your Turn! Your 8-Ball Pool opponent has finished their turn. ';
+            if (clockEl) textEl.append(clockEl);
+            if (clockEl) {
+                clockEl.textContent = formatPoolCountdown(poolTurnSecondsLeft(toast.dataset.matchId));
+                clockEl.style.cssText = 'display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:rgba(52,211,153,.18);color:#a7f3d0;font:900 12px/1.5 ui-monospace,monospace;letter-spacing:.02em;vertical-align:baseline';
+            }
             toast.classList.remove('hidden');
             // Re-entry from the hidden state: force the browser to see the
             // start transform before the transition back to rest.
@@ -8640,12 +9309,45 @@
             toast.style.transform = 'translate3d(0,0,0)';
             toast.style.opacity = '1';
             clearTimeout(Number(toast.dataset.timer) || 0);
-            toast.dataset.timer = String(setTimeout(() => hidePoolTurnToast(toast), 9000));
+            // The turn banner no longer vanishes after 9 s: the player needs it
+            // (and its clock) until they play or swipe it away by choice.
+            toast.dataset.timer = '';
+            startPoolTurnCountdown();
+            // Pull the authoritative start time, then re-paint with it.
+            void syncPoolTurnBaseline(toast.dataset.matchId).then(() => {
+                if (!toast.classList.contains('hidden') && toast.dataset.matchId === String(notification.match_id || toast.dataset.matchId || '')) {
+                    startPoolTurnCountdown();
+                }
+            });
+        }
+
+        // Put the banner back to its "Your Turn" colours after a deadline
+        // toast has recoloured it.
+        function resetPoolToastAccent(toast) {
+            if (!toast) return;
+            toast.style.border = '1px solid rgba(52,211,153,.5)';
+            toast.style.background = '#10231f';
+            const button = toast.querySelector('.pool-turn-toast-btn');
+            if (button) {
+                button.style.background = '#34d399';
+                button.style.color = '#06251b';
+                button.textContent = 'Your Turn! Open';
+            }
         }
 
         function openPoolTurnToast(toast) {
+            const challengeId = toast.dataset.challengeId;
             hidePoolTurnToast(toast);
-            void openDuelFromNotification(toast.dataset.challengeId);
+            // The banner is a shortcut to the same fresh-status path the lobby
+            // button uses, so a tap can never land on a stale turn.
+            if (!challengeId) return;
+            selectedGameId = POOL_MATCH_GAME;
+            selectedGameTitle = '8-Ball Pool';
+            poolStatusChallengeId = String(challengeId);
+            void checkPoolStatusNow(challengeId).catch(error => {
+                console.error('Could not open the pool turn from the banner:', error);
+                setStakeErr(error?.message || 'Could not open your 8-Ball turn.');
+            });
         }
 
         /* 5-minute deadline banner.
@@ -8802,6 +9504,80 @@
             window.addEventListener('resize', () => applyToastStyles(toast), { passive: true });
             window.addEventListener('orientationchange', () => setTimeout(() => applyToastStyles(toast), 120), { passive: true });
         }
+
+        /* THE NEXT TURN RE-RAISES THE BANNER.
+         *
+         * A swipe-up only dismisses THIS turn. When the rival finishes their
+         * next turn the player must be told again -- and told with the NEW
+         * turn's clock, not the old one. This watches the shared pool_matches
+         * row (turn number + current seat) and re-raises the banner for every
+         * hand-off onto this player's seat, including one that happened while
+         * the tab was asleep and the realtime socket had dropped.
+         */
+        let poolTurnWatchChannel = null;
+        let poolTurnWatchKey = '';
+        let poolTurnWatchInterval = null;
+
+        function stopPoolTurnWatch() {
+            clearInterval(poolTurnWatchInterval);
+            poolTurnWatchInterval = null;
+            const client = getSupabaseAuthClient();
+            if (poolTurnWatchChannel && client) {
+                try { client.removeChannel(poolTurnWatchChannel); } catch (error) { /* already gone */ }
+            }
+            poolTurnWatchChannel = null;
+            poolTurnWatchKey = '';
+        }
+
+        function watchPoolTurnForMatch(matchId) {
+            const key = String(matchId || '');
+            if (!key || key === poolTurnWatchKey) return;
+            stopPoolTurnWatch();
+            poolTurnWatchKey = key;
+            const client = getSupabaseAuthClient();
+            if (!client || !activeUser?.id || activeUser.isGuest) return;
+
+            const check = async () => {
+                // Don't nag a player who is already at the table.
+                if (activeTimedMatch && activeTimedMatch.gameId === '8ball') return;
+                const row = await fetchPoolMatchBySharedId(client, key).catch(() => null);
+                if (!row) return;
+                const seat = poolRowSeatForMe(row);
+                if (seat < 0 || !row.player_b_id || poolRowIsFinished(row)) return;
+                if (Number(row.current_turn) !== seat) {
+                    // The turn moved back to them: the next hand-off onto my
+                    // seat is a genuinely new notification.
+                    poolTurnNotifiedSignature = '';
+                    return;
+                }
+                const signature = `${key}:${row.turn_number ?? ''}:${row.current_turn}:${row.turn_started_at || ''}`;
+                if (signature === poolTurnNotifiedSignature) return;
+                poolTurnNotifiedSignature = signature;
+                const myChallengeId = seat === 1 ? row.player_b_challenge_id : row.player_a_challenge_id;
+                if (!myChallengeId) return;
+                showPoolTurnToast({
+                    challenge_id: String(myChallengeId),
+                    match_id: key,
+                    source_challenge_id: String(myChallengeId)
+                });
+                renderActiveChallenges();
+            };
+
+            if (typeof client.channel === 'function') {
+                poolTurnWatchChannel = client
+                    .channel(`pool-turn-watch:${key}`)
+                    .on('postgres_changes', {
+                        event: '*', schema: 'public', table: 'pool_matches', filter: `challenge_id=eq.${key}`
+                    }, () => { void check(); })
+                    .subscribe();
+            }
+            // The socket is a convenience; the poll is the guarantee (background
+            // tabs and dropped sockets are the normal case on a phone).
+            void check();
+            poolTurnWatchInterval = setInterval(() => { void check(); }, 20000);
+        }
+
+        let poolTurnNotifiedSignature = '';
 
         function subscribePoolTurnNotifications() {
             const client = getSupabaseAuthClient();

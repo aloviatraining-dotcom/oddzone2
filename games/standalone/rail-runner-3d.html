@@ -395,23 +395,35 @@ function reportCompletion(){if(completionReported)return;completionReported=true
 function start(){initAudio();reset();completionReported=false;lean=0;state='play';setPause(false);musicStart();$('pz').style.display='block';$('menu').style.display='none'}
 function crash(){
   state='over';musicStop();$('pz').style.display='none';shake=1;sfx('crash');burst(24);const sc=Math.floor(dist)+cc*5;
-  if(sc>best){best=sc;try{localStorage.setItem('rr_best',best)}catch(e){}}
+  if(sc>best){best=sc;try{localStorage.setItem('rr_best',best)}catch(e){} }
   $('bs').textContent='Best '+best;$('msg').textContent='💥 Wahala! Score '+sc+' · '+cc+' coins';$('go').textContent='RUN AGAIN';reportCompletion();
-  setTimeout(()=>{$('menu').style.display='flex'},1500);
+  // NEVER show the menu again after a crash. The score is already reported to
+  // OddZone, which shows the result card and can restart the run. Bringing the
+  // menu back left the player tapping RUN inside the arena -- the restart trap.
 }
 function finishFromOddZone(){
   if(state==='play'){
     state='over';paused=false;musicStop();$('pz').style.display='none';
     const sc=currentScore();
-    if(sc>best){best=sc;try{localStorage.setItem('rr_best',best)}catch(e){}}
-    $('bs').textContent='Best '+best;$('msg').textContent='RUN COMPLETE · Score '+sc+' · '+cc+' coins';$('go').textContent='RUN AGAIN';$('menu').style.display='flex';
+    if(sc>best){best=sc;try{localStorage.setItem('rr_best',best)}catch(e){} }
+    $('bs').textContent='Best '+best;$('msg').textContent='RUN COMPLETE · Score '+sc+' · '+cc+' coins';$('go').textContent='RUN AGAIN';
   }
+  // The arena drives what happens next (result card / play again). Showing the
+  // RUN menu here would park the player on a dead screen behind it.
   reportCompletion();
 }
+// Straight into the run: OddZone opens this game to play, not to read a menu.
+function oddzoneBoot(){ if(state!=='play'){try{start()}catch(e){}} }
 window.__oddzoneStart=start;
 window.__oddzoneEnd=finishFromOddZone;
 window.__oddzoneReadScore=currentScore;
 window.__oddzoneIsOver=()=>state==='over';
+// A message from the arena is the normal start path (the host posts
+// oddzone:start as soon as the frame loads).
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='oddzone:start')oddzoneBoot()});
+// And boot on load as well, so the run never waits for a button: the menu is
+// dismissed the moment the game is ready.
+try{setTimeout(oddzoneBoot,0)}catch(e){}
 function act(a){
   if(state!=='play'||paused)return;
   if(a==='L')lane=Math.max(0,lane-1);

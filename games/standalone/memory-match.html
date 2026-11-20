@@ -23,6 +23,13 @@
   const readScore=()=>matched*100+(symbols.length-matched)*10;
   const boardScore=()=>matched*10; // what the on-screen Pairs counter shows
 
+  // Failing is a LOSS of the board, not "the board is still open": no pairs
+  // left to find means the run is over. Without this, a player who missed
+  // every card could never finish (and never had a score recorded) until the
+  // arena clock ran out.
+  const LOSS_AFTER_MISSES=10;
+  const outOfTries=()=>attempts-matched>=LOSS_AFTER_MISSES;
+
   function reportOver(){
     if(finished)return;
     finished=true;
@@ -72,6 +79,8 @@
         open.forEach(card=>{card.button.textContent='?';card.button.classList.remove('open')});
         open=[];
         locked=false;
+        // Too many misses: the board ends here and the score is submitted.
+        if(!ended&&outOfTries()){ended=true;reportOver();}
       },700);
     }
   }
@@ -88,6 +97,11 @@
   window.__oddzoneEnd=end;
   window.__oddzoneReadScore=readScore;
   window.__oddzoneIsOver=()=>ended;
+  // The arena posts oddzone:start as soon as the frame loads; honour it so
+  // "Play Again" restarts the board instead of leaving the finished one up.
+  window.addEventListener('message',event=>{
+    if(event.data&&event.data.type==='oddzone:start')start();
+  });
   start();
 })();
 </script>

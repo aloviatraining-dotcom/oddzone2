@@ -166,9 +166,30 @@
 			// ended unseen by the arena and its score was never saved. Report the
 			// live score continuously and send one final result when it freezes.
 			window.__oddzoneIsOver = function(){ return window.gameState === 2; };
+			// OddZone posts oddzone:start on load and again for "Play Again".
+			window.addEventListener('message', function(event){
+				if (!event.data || event.data.type !== 'oddzone:start') return;
+				if (window.gameState === 0 && typeof startBtnHandler === 'function') { startBtnHandler(); return; }
+				// Mid-run or finished: clear the board and let the loop above start
+				// a fresh run once Hextris has reset itself.
+				if (window.gameState === 1) { if (typeof pause === 'function') pause(); }
+				window.__oddzoneNewRunPending = true;
+			});
 			(function(){
 				var lastScore = -1, reportedEnd = false;
 				setInterval(function(){
+					// Once the board has been cleared the next run must start clean:
+					// canvas.setGameOver() sleeps for 1 s and then re-opens the
+					// original board. Starting a new run before that fired used to
+					// resume the PREVIOUS game (the restart trap).
+					if (window.__oddzoneNewRunPending) {
+						if (window.gameState === 0 || window.gameState === 2) {
+							window.__oddzoneNewRunPending = false;
+							if (window.gameState === 2) window.gameState = 0;
+							if (typeof startBtnHandler === 'function') startBtnHandler();
+						}
+						return;
+					}
 					var s = Number(window.score) || 0;
 					if (window.gameState === 2) {
 						if (!reportedEnd) {
