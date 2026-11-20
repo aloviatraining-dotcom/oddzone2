@@ -603,7 +603,7 @@ const floats=[];
 const keys={left:false,right:false,space:false,shift:false};
 const input={down:false,pid:null,power:0};
 
-/* ASYNC TURN TIMER — 60 s, starts only on the player's very first shot */
+/* ASYNC TURN TIMER — 60 s run clock, starts only on the player's very first shot */
 const TURN_SECONDS=60;
 let asyncTurnTimer=TURN_SECONDS;
 let asyncTurnTimerActive=false;
@@ -621,9 +621,97 @@ let turnPreTurnState=null;
 let turnShotsReplay=[];
 let replayPlayback=null;
 
+/* PER-SHOT TIMER — 30 s to line the cue up and shoot.
+ * Runs independently of the 60 s run clock: it is re-armed every time the
+ * table becomes this player's to shoot, and if it expires the table is saved
+ * and the turn is passed to the other player automatically. */
+const SHOT_SECONDS=30;
+let shotTimerInterval=null;
+let shotDeadline=0;
+let shotSecondsLeft=SHOT_SECONDS;
+let shotExpiryBusy=false;
+
 /* A run is timed when it can be banked: a solo rack, a stake-backed run, or
  * any rack in the arena. A free friendly rack is untimed. */
 const isTimedRun=()=>SOLO_BACKED||SOLO_MODE||mode==='async'||mode==='online';
+
+/* Can this device take a 30 s shot right now? Only an actual turn-based
+ * rack, on an owned turn, with the table at rest. */
+function canArmShotTimer(){
+  return TURN_BASED&&asyncState.ready&&state==='aim'&&cur===TURN_SEAT&&!turnSaveInProgress&&!terminalTurnSaved;
+}
+
+/* Arm (or re-arm) the 30 s shot clock. Safe to call repeatedly. */
+function armShotTimer(reset=true){
+  if(!TURN_BASED)return;
+  if(reset)shotSecondsLeft=SHOT_SECONDS;
+  if(!canArmShotTimer()){
+    // Not our throw: park the clock but keep it visible with its full value.
+    stopShotTimer();
+    shotSecondsLeft=SHOT_SECONDS;
+    updateShotTimerHUD();
+    return;
+  }
+  stopShotTimer();
+  shotDeadline=performance.now()+shotSecondsLeft*1000;
+  updateShotTimerHUD();
+  shotTimerInterval=setInterval(()=>{
+    shotSecondsLeft=Math.max(0,Math.ceil((shotDeadline-performance.now())/1000));
+    updateShotTimerHUD();
+    if(shotSecondsLeft<=0){
+      stopShotTimer();
+      void expireShotTimer();
+    }
+  },200);
+}
+
+/* The cue was used (or the turn ended): pause the shot clock. */
+function stopShotTimer(){
+  clearInterval(shotTimerInterval);
+  shotTimerInterval=null;
+}
+
+/* 30 s gone without a shot: commit the table as it stands and pass the turn. */
+async function expireShotTimer(){
+  if(shotExpiryBusy||turnSaveInProgress||state==='over')return;
+  // The player already shot (or the ball is still rolling) while the clock
+  // ticked down: nothing to pass -- the normal end-of-turn flow owns it now.
+  if(state==='striking'||state==='moving'||state==='settling')return;
+  if(!TURN_BASED||cur!==TURN_SEAT)return;
+  shotExpiryBusy=true;
+  try{
+    toast('30 seconds up — turn passed',2400);
+    // A half-aimed cue or a ball being placed belongs to the saved table too.
+    if(strike&&state==='striking'){strike=null;state='aim';}
+    if(!firstShotFired&&isTimedRun()){
+      // Even an idle turn counts as the start of this player's run, so the
+      // arena's clock does not stay frozen at full time forever.
+      firstShotFired=true;
+    }
+    await endPoolTurn('Shot clock expired');
+  }catch(error){
+    console.error('[8-ball] could not pass the turn after the shot clock:',error);
+  }finally{
+    shotExpiryBusy=false;
+  }
+}
+
+function updateShotTimerHUD(){
+  // Use the existing turn-timer box when the table has one; otherwise a small
+  // pill above the cue panel is created on demand.
+  let el=$('shotTimerDisplay');
+  const box=$('turnTimerBox');
+  if(!el&&box){
+    el=document.createElement('div');
+    el.id='shotTimerDisplay';
+    el.setAttribute('role','timer');
+    box.appendChild(el);
+  }
+  if(!el)return;
+  el.textContent=shotSecondsLeft+'s';
+  el.style.color=shotSecondsLeft<=5?'#ef6a57':shotSecondsLeft<=10?'#f0a030':'#ffd54a';
+  el.style.fontWeight='900';
+}
 
 /* Starts the strict 1-minute clock. Called from shoot(), on the player's very
  * FIRST shot only -- never on load, never while waiting for a rival. */
@@ -758,6 +846,8 @@ const anyMoving=()=>balls.some(b=>b.state==='sinking'||(b.state==='active'&&(b.v
 function shoot(power,remote,rspin){
   if(state!=='aim'||(!remote&&!myTurn()))return;
   if(!remote&&eightPhase()&&called===null){toast('Tap a pocket first',1800);setPowerUI(0);return;}
+  // The cue is in motion: the 30 s shot clock has done its job for this shot.
+  if(!remote)stopShotTimer();
   preShotObjLeft=players[cur].group?left(players[cur].group):0;
   if(!remote&&TURN_BASED){
     turnShotsReplay.push({
@@ -1423,6 +1513,7 @@ async function savePoolTurn(isFinal,winnerSeat,reason){
 async function endPoolTurn(reason){
   if(!TURN_BASED||state==='over'||turnSaveInProgress)return;
   stopTurnTimer();
+  stopShotTimer();
   const timerBox=$('turnTimerBox');if(timerBox)timerBox.style.display='none';
   turnExpiryPending=false;
   state='wait';
@@ -1533,33 +1624,33 @@ async function checkPoolGameStatus(){
 
   try{
     const challengeId=String(poolOwnChallengeId||SOLO_MATCH_ID||'');
-    const isUuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(challengeId);
     if(!challengeId) throw new Error('This match has no reference to check.');
     const sb=getSB();
     if(!sb) throw new Error('Cannot reach the server. Check your connection and retry.');
 
-    // The challenge id may be either the pool_matches row id or one of the two
-    // per-seat stake_challenges ids, so all three are matched. The seat columns
-    // are uuid, and PostgREST rejects a malformed uuid cast, so only filter on
-    // them when the id really is one.
-    let filter='challenge_id.eq.'+challengeId;
-    if(isUuid) filter+=',player_a_challenge_id.eq.'+challengeId+',player_b_challenge_id.eq.'+challengeId;
-
-    const {data,error}=await sb
-      .from('pool_matches')
-      .select('challenge_id,player_a_id,player_b_id,current_turn,status,pending_winner_seat,updated_at')
-      .or(filter)
-      .order('updated_at',{ascending:false})
-      .limit(1)
-      .maybeSingle();
-    if(error) throw error;
+    // ONLY columns that exist on `pool_matches`. The table was created with
+    // id / code / host_name / challenger_name / status / turn / state /
+    // score / shots / scores / created_at, and the turn-based migration adds
+    // player_a_id / player_b_id / current_turn / turn_number / winner_id / …
+    // It has NEVER had `updated_at`, so selecting or ordering by it made the
+    // whole status check fail with "column pool_matches.updated_at does not
+    // exist" and told the player nothing.
+    //
+    // There is also no `challenge_id` column on this table in every
+    // environment (rows are keyed by `id`/`code`), so the lookup is a
+    // `select('*')` with a per-column fallback instead of an `.or()` that
+    // references a column that may not exist.
+    const rows=await readPoolMatchRows(sb,challengeId);
+    const data=rows&&rows.length?rows[0]:null;
     if(!data) throw new Error('That match could not be found. It may have expired.');
 
     const opponentJoined=!!data.player_b_id;
     const mySeat=TURN_SEAT;
     const myTurn=Number(data.current_turn)===mySeat;
     const matchStatus=String(data.status||'').toLowerCase();
-    const decided=matchStatus==='completed'||data.pending_winner_seat!==null&&data.pending_winner_seat!==undefined;
+    const decided=matchStatus==='completed'
+      ||(data.pending_winner_seat!==null&&data.pending_winner_seat!==undefined)
+      ||!!data.winner_id;
 
     if(decided){
       finish('This match already has a result. Return to the lobby to see it in My Games.','Match Finished','Your turn is no longer needed — this match has been settled.');
@@ -1581,9 +1672,31 @@ async function checkPoolGameStatus(){
   }
 }
 
+/* Read the pool_matches row(s) for a challenge id WITHOUT assuming any
+ * optional column exists. Tries the columns real rows are keyed by, newest
+ * first, and returns raw rows so the caller can read whatever it needs. */
+async function readPoolMatchRows(sb,challengeId){
+  const isUuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(challengeId);
+  const columns=isUuid
+    ?['challenge_id','id','player_a_challenge_id','player_b_challenge_id','code']
+    :['challenge_id','code'];
+  for(const column of columns){
+    try{
+      let query=sb.from('pool_matches').select('*').eq(column,challengeId);
+      // Order by a column this table definitely has (created_at), never
+      // updated_at.
+      query=query.order('created_at',{ascending:false});
+      const{data,error}=await query.limit(1);
+      if(error){ console.warn('[8-ball] status read on '+column+' failed:',error.message||error); continue; }
+      if(data&&data.length) return data;
+    }catch(e){ console.warn('[8-ball] status read on '+column+' threw:',e&&e.message||e); }
+  }
+  return [];
+}
+
 async function finishPoolTurn(winnerSeat,reason){
   if(!TURN_BASED||turnSaveInProgress||(terminalTurnSaved&&winnerSeat!==asyncWinner))return;
-  state='over';stopTurnTimer();updateHud();
+  state='over';stopTurnTimer();stopShotTimer();updateHud();
   asyncWinner=winnerSeat;asyncEndReason=reason;
   const localWinner=winnerSeat===TURN_SEAT;
   $('endTitle').textContent='Confirming result…';
@@ -1825,6 +1938,8 @@ function snapshot(log){
 /* JSON -> live table. `mayAct` is true only when it is this device's turn. */
 function applySnapshot(sn,mayAct){
   if(!sn||!Array.isArray(sn.balls))return;
+  // A fresh table retires any 30 s clock still attached to the previous one.
+  stopShotTimer();
   sn.balls.forEach((a,i)=>{
     const b=balls[i];if(!b)return;
     if(a[2])resetBall(b,a[0],a[1]);else{b.state='pocketed';b.vx=b.vy=0;}
@@ -2487,6 +2602,8 @@ function publishSoloRack(outcome){
 function asyncRunBanner(text){
   const b = $('pendingBanner');
   if(!b) return;
+  // Without the match's end card this notice would never be seen.
+  endOverlay.classList.remove('hidden');
   b.textContent = text;
   b.classList.add('show');
 }
@@ -2682,6 +2799,7 @@ async function startSoloBackedAsyncMatch(){
       state='wait';
       turnBasedNames();
       liveSetCueEnabled(false);
+      stopShotTimer();
       waitOverlayShow('Result Waiting for Rival','Your 8-ball result is saved. The match will settle when a rival accepts the challenge.');
       try{window.parent.postMessage({type:'oddzone:pool-turn-waiting',challengeId:poolOwnChallengeId,waitingForOpponent:true,matchDecided:true},'*');}catch(e){}
       return;
@@ -2691,6 +2809,7 @@ async function startSoloBackedAsyncMatch(){
         state='wait';
         turnBasedNames();
         liveSetCueEnabled(false);
+        stopShotTimer();
         waitOverlayShow('Challenge Posted — Waiting for Rival','Your turn is saved. A rival must accept before the next turn can be played.');
         try{window.parent.postMessage({type:'oddzone:pool-turn-waiting',challengeId:poolOwnChallengeId,waitingForOpponent:true},'*');}catch(e){}
         return;
@@ -2700,6 +2819,7 @@ async function startSoloBackedAsyncMatch(){
       state='wait';
       turnBasedNames();
       liveSetCueEnabled(false);
+      stopShotTimer();
       waitOverlayShow('Waiting for your rival','The table is saved. Return to OddZone and reopen Pool when it is your turn.');
       try{window.parent.postMessage({type:'oddzone:pool-turn-waiting',challengeId:poolOwnChallengeId,waitingForOpponent:false},'*');}catch(e){}
       return;
@@ -2720,6 +2840,8 @@ async function startSoloBackedAsyncMatch(){
     state=inHand?'place':'aim';
     beginPoolTurnCapture();
     setPowerUI(0);updateHud();renderSlots();
+    // This player's shot: 30 s to take it, or the turn passes automatically.
+    armShotTimer(true);
     toast('Your turn — continue the saved table',2800);
   }
   newGame();
@@ -2815,10 +2937,39 @@ surface.addEventListener('pointermove',e=>{
   tapInfo=null;
 }));
 
-/* Cue power slider */
-$('cuePanel').addEventListener('pointerdown',e=>{if(!myTurn()||cueDrag)return;e.preventDefault();ensureAudio();if(needPocket()){askPocket();return;}cueDrag={pid:e.pointerId,y0:e.clientY};input.down=true;input.power=0;$('cuePanel').classList.add('drag');try{$('cuePanel').setPointerCapture(e.pointerId);}catch(err){}});
-$('cuePanel').addEventListener('pointermove',e=>{if(!cueDrag||e.pointerId!==cueDrag.pid)return;input.power=clamp((e.clientY-cueDrag.y0)/cueTravel(),0,1);setPowerUI(input.power);});
-function cueEnd(e,cancel){if(!cueDrag||e.pointerId!==cueDrag.pid)return;const p=input.power;cueDrag=null;input.down=false;input.power=0;$('cuePanel').classList.remove('drag');if(!cancel&&state==='aim'&&p>=.03)shoot(p);else setPowerUI(0);}
+/* Cue power slider
+ *
+ * Power follows the finger smoothly instead of snapping to it. Each pointer
+ * move nudges a target, and the render loop eases the real value toward that
+ * target with a capped speed, so a small, slow drag builds a small power and
+ * a long, fast drag builds power progressively to the cap. */
+const CUE_POWER_MAX_RATE = 1.9;   // max change in power per second while easing
+const CUE_POWER_EASE = 7;         // how quickly the target is chased
+let cuePowerTarget = 0;
+
+function cuePowerFromEvent(e){
+  // A dead-zone plus a quadratic response curve: short taps stay gentle, and
+  // power builds more steeply the further the cue is pulled back.
+  const raw = clamp((e.clientY-cueDrag.y0)/cueTravel(),0,1);
+  const deadZone = 0.04;
+  if(raw <= deadZone) return 0;
+  const normalised = (raw-deadZone)/(1-deadZone);
+  return clamp(normalised*normalised*(0.45+0.55*normalised),0,1);
+}
+
+// Advance the eased power by dt seconds. Called from the render loop.
+function updateCuePower(dt){
+  if(!cueDrag) return;
+  const diff = cuePowerTarget-input.power;
+  const maxStep = CUE_POWER_MAX_RATE*dt;
+  const step = Math.max(-maxStep,Math.min(maxStep,diff*(1-Math.exp(-CUE_POWER_EASE*dt))));
+  input.power = clamp(input.power+step,0,1);
+  setPowerUI(input.power);
+}
+
+$('cuePanel').addEventListener('pointerdown',e=>{if(!myTurn()||cueDrag)return;e.preventDefault();ensureAudio();if(needPocket()){askPocket();return;}cueDrag={pid:e.pointerId,y0:e.clientY};input.down=true;input.power=0;cuePowerTarget=0;$('cuePanel').classList.add('drag');try{$('cuePanel').setPointerCapture(e.pointerId);}catch(err){}});
+$('cuePanel').addEventListener('pointermove',e=>{if(!cueDrag||e.pointerId!==cueDrag.pid)return;cuePowerTarget=cuePowerFromEvent(e);});
+function cueEnd(e,cancel){if(!cueDrag||e.pointerId!==cueDrag.pid)return;const p=input.power;cueDrag=null;cuePowerTarget=0;input.down=false;input.power=0;$('cuePanel').classList.remove('drag');if(!cancel&&state==='aim'&&p>=.05)shoot(p);else setPowerUI(0);}
 $('cuePanel').addEventListener('pointerup',e=>cueEnd(e,false));
 $('cuePanel').addEventListener('pointercancel',e=>cueEnd(e,true));
 
@@ -2997,6 +3148,7 @@ function draw(){
 let last=performance.now();
 function update(dt){
   updateRoll();
+  updateCuePower(dt);
   if(drift){drift.t+=dt/.4;const k=Math.min(1,drift.t),e=1-Math.pow(1-k,3);aimAngle=drift.a0+drift.da*e;if(k>=1)drift=null;}
   if(flip){flip.t+=dt/.2;const k=Math.min(1,flip.t),e=k*k*(3-2*k);aimAngle=flip.a+Math.PI*e;if(k>=1)flip=null;}
   if(wrongRing&&(wrongRing.t+=dt)>.9)wrongRing=null;

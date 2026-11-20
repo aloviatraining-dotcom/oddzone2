@@ -23,6 +23,28 @@ window.__oddzoneStart = () => gameState.reset();
 window.__oddzoneEnd = () => {
   if (!gameState.isGameOver()) gameState.gameOver();
 };
+// Block Blast only signalled the arena through the polled adapters above, so
+// the parent never received a score/end event and a lost run could be saved
+// as stale data. Publish the live score every change, and one final result the
+// moment the board locks up.
+let oddzoneReportedScore = -1;
+let oddzoneReportedEnd = false;
+setInterval(() => {
+  const score = Number(gameState.score) || 0;
+  if (!window.parent || window.parent === window) return;
+  if (gameState.isGameOver()) {
+    if (!oddzoneReportedEnd) {
+      oddzoneReportedEnd = true;
+      try { window.parent.postMessage({ type: "oddzone:game-complete", score }, "*"); } catch (e) {}
+    }
+    return;
+  }
+  oddzoneReportedEnd = false;
+  if (score !== oddzoneReportedScore) {
+    oddzoneReportedScore = score;
+    try { window.parent.postMessage({ type: "oddzone:score", score }, "*"); } catch (e) {}
+  }
+}, 500);
 
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");

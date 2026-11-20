@@ -28,6 +28,11 @@
     finished=true;
     try{parent.postMessage({type:'oddzone:game-complete',score:readScore()},'*')}catch(e){}
   }
+  // Every new pair reported as it is found, so the parent scoreboard mirrors
+  // the run as it happens and a half-finished board still submits a score.
+  function reportScore(){
+    try{parent.postMessage({type:'oddzone:score',score:readScore()},'*')}catch(e){}
+  }
 
   function start(){
     cards=[...symbols,...symbols].sort(()=>Math.random()-.5);
@@ -58,6 +63,7 @@
       open.forEach(card=>card.button.classList.add('matched'));
       matched++;
       pairsNode.textContent=String(matched);
+      reportScore();
       open=[];
       locked=false;
       if(matched===symbols.length){ended=true;reportOver();}
@@ -73,6 +79,8 @@
   function end(){
     ended=true;locked=true;
     open.forEach(card=>card.button.textContent=cards[card.index]);
+    // Report the live score BEFORE the run flag flips, then the final result.
+    open=[];
     reportOver();
   }
 

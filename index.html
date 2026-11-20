@@ -1917,7 +1917,6 @@
             // It is the only module with a live duel + async stake mode.
             { id: '8ball', title: '8-Ball Pool', category: 'Pool arcade', group: 'arcade', icon: 'fa-circle-notch', tone: 'text-emerald-200', art: 'bg-emerald-950', preview: 'games/previews/8-ball-pool.svg', path: 'games/standalone/8-ball-pool.html' },
             { id: 'star-shooter-3d', title: 'Star Shooter 3D', category: '3D space combat', group: '3d', icon: 'fa-jet-fighter-up', tone: 'text-cyan-200', art: 'bg-[#050614]', preview: 'games/previews/star-shooter-3d.svg', path: 'games/star-shooter-3d/index.html' },
-            { id: 'pacman', title: 'Pac-Man', category: 'Maze arcade', group: 'arcade', icon: 'fa-ghost', tone: 'text-yellow-300', art: 'bg-blue-950', preview: 'games/previews/pacman.svg', path: 'games/pacman/oddzone.html' },
             { id: 'pipe-hopper', title: 'Pipe Hopper', category: 'Tap arcade', group: 'arcade', icon: 'fa-feather-pointed', tone: 'text-emerald-300', art: 'bg-teal-950', preview: 'games/previews/pipe-hopper.svg', path: 'games/standalone/pipe-hopper.html' },
             { id: 'breakout', title: 'Breakout', category: 'Brick breaker', group: 'arcade', icon: 'fa-table-cells', tone: 'text-orange-300', art: 'bg-orange-950', preview: 'games/previews/breakout.svg', path: 'games/standalone/breakout.html' },
             { id: 'cave-runner', title: 'Cave Runner 3D', category: 'Three.js runner', group: '3d', icon: 'fa-person-running', tone: 'text-orange-200', art: 'bg-stone-900', preview: 'games/previews/cave-runner.svg', path: 'games/cave-runner/dist/index.html' },
@@ -1998,7 +1997,6 @@
 
         const GAME_PLAYER_BASES = {
             'star-shooter-3d': 2140,
-            'pacman': 3260,
             'pipe-hopper': 1890,
             'breakout': 1420,
             'cave-runner': 1670,
@@ -5929,9 +5927,13 @@
             async function findPoolTurnMatch(client, challengeId = null) {
                 const me = String(activeUser?.id || '');
                 if (!me) return null;
+                // Only columns that exist on pool_matches are selected (the
+                // table has no updated_at). `select('*')` keeps this working
+                // even when an environment is missing one of the optional
+                // turn columns.
                 let query = client
                     .from('pool_matches')
-                    .select('challenge_id,player_a_id,player_b_id,player_a_challenge_id,player_b_challenge_id,current_turn,status')
+                    .select('*')
                     .in('status', ['active', 'ACTIVE', 'searching', 'SEARCHING', 'waiting', 'WAITING']);
                 query = challengeId
                     ? query.or(`player_a_challenge_id.eq.${challengeId},player_b_challenge_id.eq.${challengeId}`)
@@ -5943,7 +5945,7 @@
                     throw error;
                 }
                 const matches = (data || []).map(row => {
-                    const seat = String(row.player_a_id) === me ? 0 : 1;
+                    const seat = String(row.player_a_id) === me ? 0 : (String(row.player_b_id) === me ? 1 : 0);
                     return { row, seat, status: String(row.status).toLowerCase(), opponentJoined: !!row.player_b_id, myTurn: Number(row.current_turn) === seat };
                 });
                 const match = matches.find(item => item.opponentJoined && item.myTurn) || matches[0];
@@ -6957,7 +6959,6 @@
             standalone: 'standalone',
             previews: 'previews',
             'star-shooter-3d': 'star-shooter-3d',
-            pacman: 'pacman',
             hextris: 'hextris',
             'neon-serpent': 'neon-serpent',
             'cave-runner': 'cave-runner',
@@ -7291,12 +7292,32 @@
             renderProfileRecentActivity();
         }
 
+        // Start-of-run score problems: a module that has not installed its
+        // reader yet, or a reader that still reports the PREVIOUS run's total,
+        // used to be banked as this run's starting score. `peakBeforeRun` is
+        // the highest value seen while the frame was still booting; the first
+        // real report that drops below it is the new rack's 0 and clears it.
+        let preRunScorePeak = 0;
+        let preRunScoreIgnored = false;
+
         function readActiveGameScore() {
             const gameFrame = document.getElementById('oddzone-game-frame');
             try {
                 const scoreReader = gameFrame.contentWindow?.__oddzoneReadScore;
-                const score = typeof scoreReader === 'function' ? Number(scoreReader.call(gameFrame.contentWindow)) : 0;
-                return Number.isFinite(score) ? Math.max(0, Math.floor(score)) : 0;
+                const score = typeof scoreReader === 'function' ? Number(scoreReader.call(gameFrame.contentWindow)) : Number.NaN;
+                if (!Number.isFinite(score)) return activeGameScore;
+                const normalised = Math.max(0, Math.floor(score));
+                if (!preRunScoreIgnored) {
+                    // Still booting: remember the high-water mark, do not bank it.
+                    preRunScorePeak = Math.max(preRunScorePeak, normalised);
+                    return 0;
+                }
+                if (normalised < preRunScorePeak) {
+                    // The module restarted its own counter: this is the fresh
+                    // run, not a leftover from the rack before it.
+                    preRunScorePeak = normalised;
+                }
+                return normalised;
             } catch (error) {
                 return activeGameScore;
             }
@@ -7363,6 +7384,9 @@
                 try {
                     const frame = document.getElementById('oddzone-game-frame');
                     frame.contentWindow.__oddzoneStart?.();
+                    // Modules that only listen on window (rather than exposing
+                    // __oddzoneStart) restart from this message.
+                    frame.contentWindow.postMessage({ type: 'oddzone:start' }, '*');
                 } catch (e) { /* cross-origin game — nothing we can do */ }
                 // Clear the guard whether or not the game accepted the restart,
                 // so a game that cannot be restarted does not freeze the run.
@@ -7378,8 +7402,14 @@
             clearTimeout(gameRestartTimer);
             clearTimeout(gameOverBannerTimer);
             pendingTimedMatchMode = null;
-            activeGameScore = readActiveGameScore();
-            bankedGameScore = activeGameScore;
+            // A fresh run starts with nothing banked. Whatever the frame holds
+            // right now is either 0 or the previous run's leftover total -- a
+            // module restarts its own counter AFTER this point. Banking it
+            // here made every game start at the last score instead of 0.
+            preRunScorePeak = 0;
+            preRunScoreIgnored = false;
+            activeGameScore = 0;
+            bankedGameScore = 0;
             // 8-Ball Pool runs on the strict one-minute clock, started by the
             // game itself on the first shot; every other game keeps 2 minutes.
             const runDurationMs = gameId === '8ball' ? POOL_RUN_DURATION_MS : MATCH_DURATION_MS;
@@ -7492,6 +7522,9 @@
         function releaseHeldMatch() {
             if (!activeTimedMatch || !activeTimedMatch.held) return false;
             activeTimedMatch.held = false;
+            // The run is live from here: the frame's boot guard is over, so its
+            // counter is this rack's score and not the previous one's.
+            preRunScoreIgnored = true;
             activeTimedMatch.deadline = performance.now()
                 + (activeTimedMatch.durationMs || MATCH_DURATION_MS);
             document.getElementById('match-timer').classList.remove('held');
@@ -7573,7 +7606,10 @@
             }
             // __oddzoneEnd() can zero the game's own counter (that is how these
             // games freeze the board), so take the banked high-water mark too.
-            const finalScore = Math.max(bankedGameScore, readActiveGameScore());
+            // The live reading is only honoured once the boot guard is clear:
+            // before that it is the previous rack's leftover total.
+            const liveScore = preRunScoreIgnored ? readActiveGameScore() : 0;
+            const finalScore = Math.max(bankedGameScore, liveScore);
             activeGameScore = finalScore;
             bankedGameScore = finalScore;
             finishTimedMatch(finalScore);
@@ -8005,10 +8041,21 @@
             }
 
             const reportedScore = event.data.score;
-            const isValidScore = Number.isSafeInteger(reportedScore) && reportedScore >= 0;
+            // A module may report its score as a NUMBER, as numeric text, or not
+            // at all (e.g. a plain "game over"). A lost run must still bank and
+            // submit the score that was earned, so accept every numeric form.
+            const numericScore = typeof reportedScore === 'number'
+                ? reportedScore
+                : (typeof reportedScore === 'string' && reportedScore.trim() !== '' ? Number(reportedScore) : Number.NaN);
+            const hasReportedScore = Number.isFinite(numericScore) && numericScore >= 0;
+            const validScore = hasReportedScore ? Math.floor(numericScore) : 0;
+            const isValidScore = hasReportedScore;
             if (event.data.type === 'oddzone:score') {
+                // A frozen/ended module keeps re-sending its final number; that
+                // is not a sign the run is alive again.
+                preRunScoreIgnored = true;
                 if (!isValidScore) return;
-                if (reportedScore > bankedGameScore) bankedGameScore = reportedScore;
+                if (validScore > bankedGameScore) bankedGameScore = validScore;
                 activeGameScore = bankedGameScore;
                 updateScoreboard(activeGameScore);
             } else if (event.data.type === 'oddzone:match-waiting') {
@@ -8025,10 +8072,15 @@
                     releaseHeldMatch();
                 }
             } else if (event.data.type === 'oddzone:run-started') {
+                // The module restarted its own rack: past this point its live
+                // counter is the current run and safe to bank.
+                preRunScoreIgnored = true;
                 // 8-Ball: the player took their first shot, so the one minute
                 // starts now. Sent by the module in addition to first-shot.
                 releasePoolRunClock();
             } else if (event.data.type === 'oddzone:first-shot') {
+                // The module is playing a real rack now: bank its counter.
+                preRunScoreIgnored = true;
                 // Async Take Turns: there is no opponent presence to wait for --
                 // the rack is already being played -- so the player's own first
                 // shot is what unholds the clock. Without this the 2-minute
@@ -8049,9 +8101,14 @@
                 || event.data.type === 'oddzone:game-over'
                 || event.data.type === 'oddzone:gameover'
                 || event.data.type === 'gameOver') {
-                if (isValidScore && reportedScore > bankedGameScore) {
-                    bankedGameScore = reportedScore;
+                // A loss/crash/time-up is a real result: take the score the game
+                // or the live counter reports, bank it, then save/submit it.
+                preRunScoreIgnored = true;
+                if (isValidScore && validScore > bankedGameScore) {
+                    bankedGameScore = validScore;
                 }
+                const liveScore = readActiveGameScore();
+                if (liveScore > bankedGameScore) bankedGameScore = liveScore;
                 activeGameScore = bankedGameScore;
                 // A death mid-run banks the score and restarts the game; it does
                 // not end the 2-minute match. Stake duels still end here.
@@ -8427,34 +8484,117 @@
 
         let poolTurnNotificationsChannel = null;
 
+        // Hide the pool-turn banner immediately, whatever animation is running.
+        function hidePoolTurnToast(toast = document.getElementById('pool-turn-toast')) {
+            if (!toast) return;
+            clearTimeout(Number(toast.dataset.timer) || 0);
+            toast.style.transition = 'transform .18s ease-in, opacity .18s ease-in';
+            toast.style.transform = 'translate(-50%,-120%)';
+            toast.style.opacity = '0';
+            setTimeout(() => {
+                toast.classList.add('hidden');
+                toast.style.transform = '';
+                toast.style.opacity = '';
+            }, 190);
+        }
+
         function showPoolTurnToast(notification) {
             if (!notification?.challenge_id) return;
             let toast = document.getElementById('pool-turn-toast');
             if (!toast) {
                 toast = document.createElement('div');
                 toast.id = 'pool-turn-toast';
-                toast.setAttribute('role', 'status');
+                toast.setAttribute('role', 'button');
+                toast.setAttribute('tabindex', '0');
                 toast.setAttribute('aria-live', 'polite');
-                toast.style.cssText = 'position:fixed;z-index:120;top:max(12px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:min(92vw,420px);padding:14px 16px;border:1px solid rgba(52,211,153,.5);border-radius:16px;background:#10231f;color:#f8fafc;box-shadow:0 12px 40px rgba(0,0,0,.45);display:flex;align-items:center;gap:12px';
+                toast.setAttribute('aria-label', 'Your turn in 8-Ball Pool. Tap to open, or swipe up to dismiss.');
+                // touch-action:none / user-select:none let the swipe-up gesture
+                // read cleanly on mobile instead of scrolling the page under it.
+                toast.style.cssText = 'position:fixed;z-index:120;top:max(12px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:min(92vw,420px);padding:14px 16px;border:1px solid rgba(52,211,153,.5);border-radius:16px;background:#10231f;color:#f8fafc;box-shadow:0 12px 40px rgba(0,0,0,.45);display:flex;align-items:center;gap:12px;cursor:pointer;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;will-change:transform,opacity;transition:transform .18s ease-out,opacity .18s ease-out';
                 const text = document.createElement('div');
                 text.className = 'pool-turn-toast-text';
                 text.style.cssText = 'flex:1;font-size:12px;font-weight:800;line-height:1.4';
                 const button = document.createElement('button');
                 button.type = 'button';
                 button.textContent = 'Your Turn! Open';
-                button.style.cssText = 'border:0;border-radius:10px;padding:9px 11px;background:#34d399;color:#06251b;font-size:11px;font-weight:900;white-space:nowrap;cursor:pointer';
-                button.addEventListener('click', () => {
-                    toast.classList.add('hidden');
+                button.style.cssText = 'border:0;border-radius:10px;padding:11px 13px;background:#34d399;color:#06251b;font-size:11px;font-weight:900;white-space:nowrap;cursor:pointer;touch-action:manipulation';
+                const openTurn = () => {
+                    hidePoolTurnToast(toast);
                     void openDuelFromNotification(toast.dataset.challengeId);
-                });
+                };
+                // The WHOLE banner is the tap target, not just the small button:
+                // on a phone the button was easy to miss.
+                button.addEventListener('click', event => { event.stopPropagation(); openTurn(); });
                 toast.append(text, button);
                 document.body.appendChild(toast);
+
+                // Tap anywhere on the banner to open the turn. A gesture that
+                // turned into a swipe must not also fire this.
+                toast.addEventListener('click', () => {
+                    if (toast.dataset.swiped === '1') return;
+                    openTurn();
+                });
+                toast.addEventListener('keydown', event => {
+                    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openTurn(); }
+                });
+
+                // SWIPE-UP TO DISMISS. Tracks one pointer; the banner follows
+                // the finger upward past a short threshold to hide.
+                let startY = null;
+                let startX = 0;
+                let activePointer = null;
+                toast.addEventListener('pointerdown', event => {
+                    if (event.target.closest('button') && event.pointerType === 'mouse') return;
+                    startY = event.clientY;
+                    startX = event.clientX;
+                    activePointer = event.pointerId;
+                    toast.dataset.swiped = '0';
+                    toast.style.transition = 'none';
+                    try { toast.setPointerCapture(event.pointerId); } catch (e) {}
+                });
+                toast.addEventListener('pointermove', event => {
+                    if (startY === null || event.pointerId !== activePointer) return;
+                    const dy = event.clientY - startY;
+                    const dx = event.clientX - startX;
+                    if (Math.abs(dy) > Math.abs(dx) && dy < 0) {
+                        // Only upward travel moves the banner; a downward drag
+                        // springs back.
+                        toast.style.transform = `translate(-50%, ${Math.max(dy, -60)}px)`;
+                        if (dy < -8) toast.dataset.swiped = '1';
+                    }
+                });
+                const endSwipe = event => {
+                    if (startY === null || (event.pointerId !== undefined && event.pointerId !== activePointer)) return;
+                    const dy = (event.clientY ?? startY) - startY;
+                    const dx = Math.abs((event.clientX ?? startX) - startX);
+                    startY = null;
+                    activePointer = null;
+                    toast.style.transition = 'transform .18s ease-out,opacity .18s ease-out';
+                    if (dy < -30 && Math.abs(dy) > dx) {
+                        toast.dataset.swiped = '1';
+                        hidePoolTurnToast(toast);
+                    } else if (dy < -8) {
+                        // A small nudge upward counts as a tap-dismiss intent.
+                        toast.dataset.swiped = '1';
+                        hidePoolTurnToast(toast);
+                    } else {
+                        toast.style.transform = 'translate(-50%, 0)';
+                    }
+                };
+                toast.addEventListener('pointerup', endSwipe);
+                toast.addEventListener('pointercancel', endSwipe);
             }
             toast.dataset.challengeId = String(notification.challenge_id);
+            toast.dataset.swiped = '0';
+            toast.style.transition = 'transform .18s ease-out,opacity .18s ease-out';
+            toast.style.transform = 'translate(-50%, 0)';
+            toast.style.opacity = '';
             toast.querySelector('.pool-turn-toast-text').textContent = 'Your Turn! Your 8-Ball Pool opponent has finished their turn.';
+            // Let the player tap the message itself as well as the button.
+            toast.querySelector('.pool-turn-toast-text').style.pointerEvents = 'none';
             toast.classList.remove('hidden');
             clearTimeout(Number(toast.dataset.timer) || 0);
-            toast.dataset.timer = String(setTimeout(() => toast.classList.add('hidden'), 9000));
+            toast.dataset.timer = String(setTimeout(() => hidePoolTurnToast(toast), 9000));
         }
 
         function subscribePoolTurnNotifications() {
@@ -8465,6 +8605,10 @@
                     console.warn('Could not replace the pool-turn notification channel:', error);
                 }
             }
+            // The notification row exists because the rival's device finished
+            // its turn. Show it on INSERT (realtime) and, as a fallback for a
+            // dropped socket, when a fresh row is fetched.
+            lastSeenPoolTurnNotificationId = null;
             poolTurnNotificationsChannel = client.channel(`pool-turn-notifications:${activeUser.id}`)
                 .on('postgres_changes', {
                     event: 'INSERT',
@@ -8473,7 +8617,7 @@
                     filter: `user_id=eq.${activeUser.id}`
                 }, payload => {
                     const row = payload.new || {};
-                    if (row.kind !== 'pool_turn_ready') return;
+                    if (!isPoolTurnNotification(row)) return;
                     showPoolTurnToast(row);
                     void loadDuelNotifications().catch(error => console.error('Could not refresh pool-turn notifications:', error));
                     renderActiveChallenges();
@@ -8483,6 +8627,26 @@
                         console.warn('Pool-turn notifications realtime status:', status);
                     }
                 });
+        }
+
+        // A turn-ready row for POOL, in any casing the backend uses.
+        function isPoolTurnNotification(row) {
+            const kind = String(row?.kind || '').toLowerCase();
+            if (!kind) return false;
+            return kind.includes('pool_turn') || kind.includes('pool-turn') || kind.includes('turn_ready');
+        }
+
+        let lastSeenPoolTurnNotificationId = null;
+
+        // Fallback path: the same banner is raised for a turn-ready row seen in
+        // the periodic/notification read, so a missed realtime event does not
+        // leave the player uninformed that it is now their turn.
+        function maybeShowPoolTurnFromRows(rows) {
+            if (typeof document.hidden === 'boolean' && document.hidden) return;
+            const newest = (rows || []).find(isPoolTurnNotification);
+            if (!newest || String(newest.id) === String(lastSeenPoolTurnNotificationId)) return;
+            lastSeenPoolTurnNotificationId = newest.id;
+            if (!newest.read_at) showPoolTurnToast(newest);
         }
 
         async function loadDuelNotifications() {
@@ -8500,6 +8664,7 @@
                 .order('created_at', { ascending: false })
                 .limit(50);
             if (error) throw error;
+            maybeShowPoolTurnFromRows(data || []);
             remoteDuelNotifications = (data || []).map(notification => ({
                 id: `server-${notification.id}`,
                 serverId: notification.id,

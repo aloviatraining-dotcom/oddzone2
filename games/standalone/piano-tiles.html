@@ -300,6 +300,9 @@ canvas {
         for (let i = 0; i < tiles.length; i++) {
             const t = tiles[i];
             if (!t.hit && t.y > H) {
+                // A missed tile is a loss, and the score earned so far must
+                // still be reported before the run is frozen.
+                try { window.parent.postMessage({ type: 'oddzone:score', score }, '*'); } catch(e) {}
                 triggerGameOver('Missed a tile!');
                 draw();
                 return;
@@ -407,7 +410,10 @@ canvas {
         if (e.data.type === 'oddzone:mute') {
             soundEnabled = !e.data.muted;
         } else if (e.data.type === 'oddzone:start') {
+            // The arena's restart after a loss arrives as a message too.
             if (!isRunning) window.startGame();
+        } else if (e.data.type === 'oddzone:end') {
+            if (!isGameOver) triggerGameOver('Match ended');
         } else if (e.data.type === 'oddzone:pause') {
             isRunning = false;
         } else if (e.data.type === 'oddzone:resume') {
@@ -421,7 +427,7 @@ canvas {
 
     window.__oddzoneStart = window.startGame;
     window.__oddzoneReadScore = () => score;
-    window.__oddzoneEnd = () => { if (isRunning && !isGameOver) triggerGameOver('Match ended'); };
+    window.__oddzoneEnd = () => { if (!isGameOver) triggerGameOver('Match ended'); };
     window.__oddzoneIsOver = () => isGameOver;
     draw();
 })();

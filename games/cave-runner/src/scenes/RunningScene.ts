@@ -11,6 +11,15 @@ import allCharacters, { normalizeCharacterAssets } from '../allCharacters';
 
 import { IallGameCharacters } from '../types';
 
+// Runner movement constants, shared by the keyboard and the touch handlers.
+const GROUND_Y = -35;          // standing height on the track
+const JUMP_HEIGHT = 30;        // how far the hop lifts the runner
+const JUMP_UP_MS = 280;        // rise time
+const JUMP_DOWN_MS = 360;      // fall time
+const SLIDE_DROP = 6;          // how low the slide crouches
+const SLIDE_MS = 800;          // how long a slide lasts
+const SWIPE_MIN_DISTANCE = 24; // px of travel before a touch counts as a swipe
+
 export default class RunningScene extends Scene {
   private fbxLoader = new FBXLoader();
 
@@ -47,6 +56,8 @@ export default class RunningScene extends Scene {
   private slidingAnimation !: AnimationAction;
 
   private sliderTimeout!: ReturnType<typeof setTimeout>;
+
+  private animationFinishedHandler: (() => void) | null = null;
 
   private barrelObject = new Object3D();
 
@@ -95,6 +106,8 @@ export default class RunningScene extends Scene {
   private touchstartY = 0;
 
   private touchendY = 0;
+
+  private touchPointerId: number | null = null;
 
   private xbot = new Object3D();
 
@@ -204,15 +217,42 @@ export default class RunningScene extends Scene {
     this.generateRightCoins();
 
     const gestureZone = (document.getElementById('app') as HTMLInputElement);
-    if (!this.isGameOver && !this.isGamePaused) {
+    if (gestureZone) {
+      // Registered ONCE, outside the game-over/paused guard: the old code only
+      // attached these while a run was live, so after the first death (or
+      // pause) the swipe controls were gone for every later run. Each handler
+      // checks the live state itself instead.
       gestureZone.addEventListener('touchstart', (event) => {
         this.touchstartX = event.changedTouches[0].screenX;
         this.touchstartY = event.changedTouches[0].screenY;
-      }, false);
+        this.touchendX = this.touchstartX;
+        this.touchendY = this.touchstartY;
+      }, { passive: true });
 
       gestureZone.addEventListener('touchend', (event) => {
+        if (this.isGameOver || this.isGamePaused) return;
         this.touchendX = event.changedTouches[0].screenX;
         this.touchendY = event.changedTouches[0].screenY;
+        this.handleTouch();
+      }, false);
+
+      // Pointer swipes for touchscreens that deliver pointer events only.
+      gestureZone.addEventListener('pointerdown', (event) => {
+        if (event.pointerType === 'mouse') return;
+        this.touchPointerId = event.pointerId;
+        this.touchstartX = event.clientX;
+        this.touchstartY = event.clientY;
+        this.touchendX = event.clientX;
+        this.touchendY = event.clientY;
+      }, { passive: true });
+      gestureZone.addEventListener('pointerup', (event) => {
+        if (event.pointerType === 'mouse' || event.pointerId !== this.touchPointerId) return;
+        if (this.isGameOver || this.isGamePaused) return;
+        // The touch* handlers already reacted to this gesture on most devices.
+        if (event.clientX === this.touchendX && event.clientY === this.touchendY
+          && (this.touchendX !== this.touchstartX || this.touchendY !== this.touchstartY)) return;
+        this.touchendX = event.clientX;
+        this.touchendY = event.clientY;
         this.handleTouch();
       }, false);
     }
@@ -334,21 +374,28 @@ export default class RunningScene extends Scene {
     );
 
     document.onkeydown = (e) => {
-      if (!this.isGameOver && !this.isGamePaused) {
-        if (e.key === 'ArrowLeft') {
-          this.moveLeft();
-        } if (e.key === 'ArrowRight') {
-          this.moveRight();
-        }
-        if (e.key === 'ArrowUp') {
-          this.jump();
-        }
-        if (e.key === 'ArrowDown') {
-          this.slide();
-        }
-        if (e.key === ' ') {
-          this.pauseAndResumeGame();
-        }
+      if (this.isGameOver || this.isGamePaused) return;
+      const key = e.key;
+      const code = e.code;
+      if (key === 'ArrowLeft' || key === 'a' || key === 'A' || code === 'KeyA') {
+        e.preventDefault();
+        this.moveLeft();
+      } else if (key === 'ArrowRight' || key === 'd' || key === 'D' || code === 'KeyD') {
+        e.preventDefault();
+        this.moveRight();
+      } else if (key === 'ArrowUp' || key === 'w' || key === 'W' || code === 'KeyW'
+        || code === 'Space' || key === ' ') {
+        // Space is BOTH the jump button and the pause key on the old build:
+        // pausing mid-hop is exactly what made jumps vanish. Space jumps now;
+        // P / Escape pauses.
+        e.preventDefault();
+        this.jump();
+      } else if (key === 'ArrowDown' || key === 's' || key === 'S' || code === 'KeyS') {
+        e.preventDefault();
+        this.slide();
+      } else if (key === 'p' || key === 'P' || key === 'Escape') {
+        e.preventDefault();
+        this.pauseAndResumeGame();
       }
     };
   }
@@ -366,7 +413,7 @@ export default class RunningScene extends Scene {
 
     this.player = this.charactersContainer[this.activePlayerIndex];
     this.player.position.z = -110;
-    this.player.position.y = -35;
+    this.player.position.y = GROUND_Y;
     this.player.position.x = 0;
     this.player.scale.set(0.1, 0.1, 0.1);
     this.player.rotation.y = 180 * (Math.PI / 180);
@@ -519,6 +566,13 @@ export default class RunningScene extends Scene {
     this.player.visible = false;
     this.clock.stop();
     this.player.rotation.x = 0;
+    // A rack left mid-hop/mid-slide must not carry that pose (or a locked
+    // flag) into the next run.
+    clearTimeout(this.sliderTimeout);
+    this.isJumping = false;
+    this.isSliding = false;
+    this.isGamePaused = false;
+    this.player.position.y = GROUND_Y;
   }
 
   private gameOver() {
@@ -550,6 +604,14 @@ export default class RunningScene extends Scene {
 
   private restartGame() {
     (document.getElementById('game-over-modal') as HTMLInputElement).style.display = 'none';
+    // Clear any hop/slide left over from the lost run, so the new run starts
+    // on the ground with both actions available.
+    clearTimeout(this.sliderTimeout);
+    this.jumpingUp?.stop();
+    this.jumpingDown?.stop();
+    this.isJumping = false;
+    this.isSliding = false;
+    this.player.position.y = GROUND_Y;
     this.currentObstacleOne.position.z = -1200;
     this.currentObstacleTwo.position.z = -1500;
     this.activeCoinsGroup.position.z = -1800;
@@ -625,58 +687,118 @@ export default class RunningScene extends Scene {
   }
 
   private jump() {
-    if (!this.isJumping) {
-      if (this.isSliding) {
-        clearTimeout(this.sliderTimeout);
-        this.player.position.y = -35;
-        this.isSliding = false;
-      }
-      this.isJumping = true;
-      this.currentAnimation.stop();
-      this.currentAnimation = this.jumpingAnimation;
-      this.currentAnimation.reset();
-      this.currentAnimation.setLoop(1, 1);
-      this.currentAnimation.clampWhenFinished = true;
-      this.currentAnimation.play();
-      this.animationMixer.addEventListener('finished', () => {
-        this.currentAnimation.crossFadeTo(this.runningAnimation, 0.1, false).play();
-        this.currentAnimation = this.runningAnimation;
-      });
-
-      this.jumpingUp = new Tween(this.player.position).to({ y: this.player.position.y += 20 }, 400);
-      this.jumpingDown = new Tween(this.player.position)
-        .to({ y: this.player.position.y -= 20 }, 500);
-      this.jumpingUp.chain(this.jumpingDown);
-      this.jumpingUp.start();
-      this.jumpingDown.onComplete(() => {
-        this.isJumping = false;
-        this.player.position.y = -35;
-      });
+    if (this.isGameOver || this.isGamePaused) return;
+    if (this.isJumping) return;
+    if (this.isSliding) {
+      // A slide in progress is cancelled cleanly before the hop starts.
+      this.endSlide();
     }
+    this.isJumping = true;
+    // The jump always starts from the ground, never from a half-applied
+    // offset -- that drift is what used to leave the runner floating and
+    // unable to clear (or pass under) the next obstacle.
+    this.player.position.y = GROUND_Y;
+    this.currentAnimation.stop();
+    this.currentAnimation = this.jumpingAnimation;
+    this.currentAnimation.reset();
+    this.currentAnimation.setLoop(1, 1);
+    this.currentAnimation.clampWhenFinished = true;
+    this.currentAnimation.play();
+    this.refreshFinishedListener();
+
+    // Absolute targets, and only one tween alive per half of the hop: the old
+    // code chained a relative `+= 20` with a `-= 20` and re-registered its
+    // onComplete every jump, so a fast second jump moved the runner twice.
+    this.jumpingUp = new Tween(this.player.position)
+      .to({ y: GROUND_Y + JUMP_HEIGHT }, JUMP_UP_MS)
+      .easing(TWEEN.Easing.Quadratic.Out);
+    this.jumpingDown = new Tween(this.player.position)
+      .to({ y: GROUND_Y }, JUMP_DOWN_MS)
+      .easing(TWEEN.Easing.Quadratic.In)
+      .onComplete(() => {
+        this.player.position.y = GROUND_Y;
+        this.isJumping = false;
+      });
+    this.jumpingUp.chain(this.jumpingDown);
+    this.jumpingUp.start();
   }
 
   private slide() {
+    if (this.isGameOver || this.isGamePaused) return;
+    // Re-triggering a slide simply extends it, so holding/pressing again is
+    // never ignored and the runner can never get stuck in an old slide.
+    if (this.isJumping) {
+      this.cancelJump();
+    }
+    clearTimeout(this.sliderTimeout);
     if (!this.isSliding) {
-      if (this.isJumping) {
-        this.jumpingUp.stop();
-        this.jumpingDown.stop();
-        this.player.position.y = -35;
-        this.isJumping = false;
-      }
       this.isSliding = true;
-      this.player.position.y -= 5;
+      this.player.position.y = GROUND_Y - SLIDE_DROP;
       this.currentAnimation.stop();
       this.slidingAnimation.reset();
       this.currentAnimation = this.slidingAnimation;
+      this.slidingAnimation.setLoop(1, 1);
       this.slidingAnimation.clampWhenFinished = true;
       this.slidingAnimation.play();
-      this.slidingAnimation.crossFadeTo(this.runningAnimation, 1.9, false).play();
-      this.currentAnimation = this.runningAnimation;
-      this.sliderTimeout = setTimeout(() => {
-        this.player.position.y = -35;
-        this.isSliding = false;
-      }, 800);
+      this.refreshFinishedListener();
     }
+    this.sliderTimeout = setTimeout(() => this.endSlide(), SLIDE_MS);
+  }
+
+  /** Finish a slide: back to the running pose and standing height. */
+  private endSlide() {
+    clearTimeout(this.sliderTimeout);
+    if (!this.isSliding) return;
+    this.isSliding = false;
+    this.player.position.y = GROUND_Y;
+    if (!this.isJumping && !this.isGameOver) {
+      this.currentAnimation.stop();
+      this.runningAnimation.reset();
+      this.runningAnimation.play();
+      this.currentAnimation = this.runningAnimation;
+    }
+  }
+
+  /** Abort a jump mid-air (a slide interrupts it) without leaving it chained. */
+  private cancelJump() {
+    this.jumpingUp.stop();
+    this.jumpingDown.stop();
+    this.isJumping = false;
+    this.player.position.y = GROUND_Y;
+  }
+
+  /**
+   * One animation 'finished' listener for the current mixer.
+   *
+   * The old jump() added a NEW listener on every jump and never removed it, so
+   * after a few hops the mixer cross-faded the running pose several times per
+   * hop and could end up on a stale action (runner stuck in the jump/slide
+   * pose while the world kept moving).
+   */
+  private refreshFinishedListener() {
+    if (this.animationMixer && this.animationFinishedHandler) {
+      this.animationMixer.removeEventListener('finished', this.animationFinishedHandler);
+    }
+    if (!this.animationMixer) return;
+    this.animationFinishedHandler = () => {
+      if (this.isGameOver || this.isPausedState()) return;
+      const action = this.currentAnimation;
+      if (action !== this.jumpingAnimation && action !== this.slidingAnimation) return;
+      // Return to the run only once the pose that was playing has ended and
+      // the matching movement (hop / slide) is actually over.
+      if (action === this.jumpingAnimation && this.isJumping) return;
+      if (action === this.slidingAnimation && this.isSliding) return;
+      action.fadeOut(0.1);
+      this.runningAnimation.reset();
+      this.runningAnimation.setEffectiveWeight(1);
+      this.runningAnimation.play();
+      this.currentAnimation = this.runningAnimation;
+    };
+    this.animationMixer.addEventListener('finished', this.animationFinishedHandler);
+  }
+
+  private isPausedState() {
+    return this.isGamePaused;
   }
 
   private createRandomObstacle() {
@@ -837,27 +959,27 @@ Link: https://stackoverflow.com/a/62825217
   */
 
   private handleTouch = () => {
-    const pageWidth = window.innerWidth || document.body.clientWidth;
-    const treshold = Math.max(1, Math.floor(0.01 * (pageWidth)));
-    const limit = Math.tan(45 * (1.5 / 180) * Math.PI);
     const x = this.touchendX - this.touchstartX;
     const y = this.touchendY - this.touchstartY;
-    const xy = Math.abs(x / y);
-    const yx = Math.abs(y / x);
-    if (Math.abs(x) > treshold || Math.abs(y) > treshold) {
-      if (yx <= limit) {
-        if (x < 0) {
-          this.moveLeft();
-        } else {
-          this.moveRight();
-        }
+    const absX = Math.abs(x);
+    const absY = Math.abs(y);
+    // A sideways swipe has to beat the vertical one clearly, otherwise a mostly
+    // vertical flick that drifts a little sideways was read as a lane change
+    // and the jump/slide never happened.
+    if (absX < SWIPE_MIN_DISTANCE && absY < SWIPE_MIN_DISTANCE) return;
+    if (absX > absY * 1.25) {
+      if (x < 0) {
+        this.moveLeft();
+      } else {
+        this.moveRight();
       }
-      if (xy <= limit) {
-        if (y < 0) {
-          this.jump();
-        } else {
-          this.slide();
-        }
+      return;
+    }
+    if (absY >= absX) {
+      if (y < 0) {
+        this.jump();
+      } else {
+        this.slide();
       }
     }
   };

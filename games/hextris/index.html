@@ -162,6 +162,28 @@
 				window.canRestart = 0;
 				document.body.style.pointerEvents = 'none';
 			};
+			// Hextris freezes at gameState 2 with no message of its own, so the run
+			// ended unseen by the arena and its score was never saved. Report the
+			// live score continuously and send one final result when it freezes.
+			window.__oddzoneIsOver = function(){ return window.gameState === 2; };
+			(function(){
+				var lastScore = -1, reportedEnd = false;
+				setInterval(function(){
+					var s = Number(window.score) || 0;
+					if (window.gameState === 2) {
+						if (!reportedEnd) {
+							reportedEnd = true;
+							try { parent.postMessage({ type: 'oddzone:game-complete', score: s }, '*'); } catch (e) {}
+						}
+						return;
+					}
+					reportedEnd = false;
+					if (s !== lastScore) {
+						lastScore = s;
+						try { parent.postMessage({ type: 'oddzone:score', score: s }, '*'); } catch (e) {}
+					}
+				}, 500);
+			})();
 		</script>
 	</body>
 </html>
