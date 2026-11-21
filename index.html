@@ -3051,6 +3051,9 @@
             loadProfileFollowCounts();
             setAuthStatus('');
             if (activeUser.id && !activeUser.isGuest) {
+                // The dismissed-turn set belongs to ONE account: a different
+                // player must not inherit (or be silenced by) another's keys.
+                if (poolTurnDismissedOwner !== String(activeUser.id)) resetDismissedPoolTurnKeys(activeUser.id);
                 void loadPracticeAccountData();
                 void loadDuelNotifications().catch(error => {
                     console.warn('Could not load duel notifications:', error);
@@ -8545,6 +8548,8 @@
             closeSettingsModal();
             document.getElementById('kyc-modal')?.classList.add('hidden');
             localStorage.removeItem(STORAGE_KEYS.currentUser);
+            // Never carry one account's dismissed turns into the next sign-in.
+            resetDismissedPoolTurnKeys('');
             const client = getSupabaseAuthClient();
             if (client) {
                 try { await client.auth.signOut(); } catch (error) { /* stay on auth screen */ }
@@ -9308,11 +9313,15 @@
             return 'translate3d(0, 0, 0)';
         }
 
+        // Every dismissal -- auto-hide, swipe-up or "Open" -- lands here, and
+        // every one of them records the turn key so this exact hand-off can
+        // never be raised again by a poll, a Realtime tick or a reload.
         function hidePoolTurnToast(toast = document.getElementById('pool-turn-toast')) {
             if (!toast) return;
             // A swipe/tap dismissal must also kill the auto-hide, or it fires
             // again later on a banner that is already gone.
             cancelPoolTurnAutoHide(toast);
+            rememberDismissedPoolTurnKey(toast.dataset.turnKey);
             swallowNextClick(toast);
             // The countdown belongs to a visible banner; stop ticking it. It is
             // restarted from the SERVER clock the next time this banner is
@@ -9380,7 +9389,7 @@
                 'overflow:hidden',
                 // The banner owns vertical gestures: Safari must not scroll the
                 // page (or bounce it) out from under the swipe-up.
-                'touch-action:none',
+                'touch-action:pan-x',
                 '-webkit-touch-callout:none',
                 '-webkit-user-select:none',
                 'user-select:none',
@@ -9398,10 +9407,73 @@
             }
         }
 
+        /* DISMISSED TURN KEYS -- the banner must never nag for the same turn.
+         *
+         * Every path that shows the banner can be re-run by the 20 s poll, a
+         * Realtime tick, a tab-visibility refresh or a page reload, and each
+         * of them sees the SAME pool_matches row (same turn_number). A turn
+         * key is therefore "matchId:turnNumber" (falling back to the row's
+         * updated_at/turn_started_at when no counter is present). Once a key
+         * is shown, auto-hidden, swiped up or opened, it is remembered in
+         * memory AND sessionStorage, so that exact turn can never re-raise
+         * the banner -- only the rival's NEXT turn (turn_number + 1) does.
+         */
+        const POOL_TURN_DISMISSED_STORAGE_KEY = 'oddzone.dismissedPoolTurnKeys.v1';
+        const POOL_TURN_DISMISSED_OWNER_KEY = 'oddzone.dismissedPoolTurnOwner.v1';
+        let dismissedPoolTurnKeys = new Set();
+        let poolTurnDismissedOwner = '';
+        try {
+            const stored = JSON.parse(sessionStorage.getItem(POOL_TURN_DISMISSED_STORAGE_KEY) || '[]');
+            if (Array.isArray(stored)) dismissedPoolTurnKeys = new Set(stored.map(String));
+            poolTurnDismissedOwner = sessionStorage.getItem(POOL_TURN_DISMISSED_OWNER_KEY) || '';
+        } catch (error) { /* storage unavailable: in-memory set still works */ }
+
+        function rememberDismissedPoolTurnKey(key) {
+            const value = String(key || '');
+            if (!value) return;
+            dismissedPoolTurnKeys.add(value);
+            try {
+                // Keep the set bounded: the newest 200 keys are plenty.
+                const keys = [...dismissedPoolTurnKeys].slice(-200);
+                dismissedPoolTurnKeys = new Set(keys);
+                sessionStorage.setItem(POOL_TURN_DISMISSED_STORAGE_KEY, JSON.stringify(keys));
+                sessionStorage.setItem(POOL_TURN_DISMISSED_OWNER_KEY, String(poolTurnDismissedOwner || ''));
+            } catch (error) { /* storage unavailable: in-memory set still works */ }
+        }
+
+        // Start a clean, per-account set. Called on sign-in when the account
+        // changed (and on sign-out), never on a page reload of the SAME user.
+        function resetDismissedPoolTurnKeys(ownerId) {
+            dismissedPoolTurnKeys = new Set();
+            poolTurnDismissedOwner = String(ownerId || '');
+            try {
+                sessionStorage.setItem(POOL_TURN_DISMISSED_STORAGE_KEY, '[]');
+                sessionStorage.setItem(POOL_TURN_DISMISSED_OWNER_KEY, poolTurnDismissedOwner);
+            } catch (error) { /* storage unavailable */ }
+        }
+
+        function isPoolTurnKeyDismissed(key) {
+            return !!key && dismissedPoolTurnKeys.has(String(key));
+        }
+
+        // A stable key for one opponent hand-off: the row's turn counter when
+        // present, else the row's timestamp fields, else the notification id.
+        function poolTurnKeyFor(row, matchId) {
+            const match = String(matchId || row?.match_id || row?.challenge_id || row?.source_challenge_id || '');
+            const turn = row?.turn_number ?? row?.turn_count ?? row?.turn;
+            const stamp = row?.updated_at || row?.turn_started_at || row?.created_at || '';
+            const key = `${match}:${turn ?? stamp}`;
+            if (match && (turn !== undefined || stamp)) return key;
+            return row?.id ? `${match}:n${row.id}` : '';
+        }
+
         function showPoolTurnToast(notification) {
             if (!notification?.challenge_id) return;
             // Already at the table: the turn is being played, not pending.
             if (activeTimedMatch && activeTimedMatch.gameId === '8ball') return;
+            // This exact hand-off was already dismissed (poll/Realtime reload
+            // of the same row): never raise it again.
+            if (isPoolTurnKeyDismissed(notification.turn_key)) return;
             // Keep listening for the NEXT hand-off onto this seat, so a swipe-up
             // hides this turn only and the rival's next finish re-raises it.
             const watchMatchId = notification.match_id || notification.source_challenge_id || notification.challenge_id;
@@ -9457,6 +9529,7 @@
             applyToastStyles(toast);
             toast.dataset.challengeId = String(notification.challenge_id);
             toast.dataset.matchId = String(notification.match_id || notification.source_challenge_id || notification.challenge_id || '');
+            toast.dataset.turnKey = String(notification.turn_key || '');
             toast.dataset.swipeGuard = '0';
             resetPoolToastAccent(toast);
             const textEl = toast.querySelector('.pool-turn-toast-text');
@@ -9671,11 +9744,16 @@
             let startX = 0;
             let activeId = null;
             let mode = null;               // 'pointer' | 'touch'
+            let dragging = false;
 
             const begin = (id, x, y) => {
+                // A banner that is already hidden must not start a gesture:
+                // its timers are gone and its key is already dismissed.
+                if (toast.classList.contains('hidden')) return;
                 startY = y;
                 startX = x;
                 activeId = id;
+                dragging = false;
                 toast.dataset.swipeGuard = '0';
                 toast.style.transition = 'none';
             };
@@ -9689,9 +9767,9 @@
                 // slide the card sideways, so horizontal movement is ignored and
                 // the transform is rebuilt from scratch every frame.
                 if (dy < 0 && Math.abs(dy) >= Math.abs(dx)) {
-                    if (Math.abs(dy) > SWIPE_START_PX) swallowNextClick(toast);
-                    toast.style.transform = `translate3d(0, ${Math.max(dy, -140)}px, 0)`;
-                    toast.style.opacity = String(Math.max(0.1, 1 - Math.abs(dy) / 140));
+                    if (Math.abs(dy) > SWIPE_START_PX) { swallowNextClick(toast); dragging = true; }
+                    toast.style.transform = `translate3d(0, ${Math.max(dy, -160)}px, 0)`;
+                    toast.style.opacity = String(Math.max(0, 1 - Math.abs(dy) / 120));
                 }
             };
 
@@ -9701,12 +9779,18 @@
                 const dx = Math.abs((typeof x === 'number' ? x : startX) - startX);
                 startY = null;
                 activeId = null;
-                toast.style.transition = 'transform .2s ease-out, opacity .2s ease-out';
-                if (dy <= -SWIPE_DISMISS_PX && Math.abs(dy) > dx) {
+                // A fast flick up counts even if it did not travel far: the
+                // gesture is "up", so it dismisses rather than snapping back.
+                if (dy <= -SWIPE_DISMISS_PX && Math.abs(dy) >= dx) {
+                    // hidePoolTurnToast() also cancels the ~5 s auto-hide, stops
+                    // the countdown interval and marks the turn key dismissed.
                     hidePoolTurnToast(toast);
                 } else {
-                    // Not far enough: spring back, and clear the tap guard so the
-                    // next genuine tap still opens the turn.
+                    // Not far enough (or not a vertical gesture): spring back and
+                    // clear the tap guard so the next genuine tap still opens
+                    // the turn. A dismissal never reaches this branch, so the
+                    // card can never be pulled back down after being hidden.
+                    toast.style.transition = 'transform .2s ease-out, opacity .2s ease-out';
                     toast.style.transform = 'translate3d(0,0,0)';
                     toast.style.opacity = '1';
                     setTimeout(() => { if (!toast.classList.contains('hidden')) toast.dataset.swipeGuard = '0'; }, 60);
@@ -9716,6 +9800,8 @@
             // ── pointer ──────────────────────────────────────────────────────
             toast.addEventListener('pointerdown', event => {
                 if (event.pointerType === 'mouse' && event.button > 0) return;
+                // Pointer events win when the browser delivers both; the touch
+                // fallback below bails out once this flag is set.
                 mode = 'pointer';
                 try { toast.setPointerCapture(event.pointerId); } catch (e) {}
                 begin(event.pointerId, event.clientX, event.clientY);
@@ -9735,6 +9821,7 @@
             toast.addEventListener('touchstart', event => {
                 if (mode === 'pointer') return;
                 const t = event.changedTouches[0];
+                if (!t) return;
                 mode = 'touch';
                 begin(t.identifier, t.clientX, t.clientY);
             }, { passive: true });
@@ -9782,6 +9869,9 @@
         function stopPoolTurnWatch() {
             clearInterval(poolTurnWatchInterval);
             poolTurnWatchInterval = null;
+            // Forget the signature too: the NEXT watch (a new hand-off) must be
+            // able to raise the banner for its own turn key.
+            poolTurnNotifiedSignature = '';
             const client = getSupabaseAuthClient();
             if (poolTurnWatchChannel && client) {
                 try { client.removeChannel(poolTurnWatchChannel); } catch (error) { /* already gone */ }
@@ -9804,22 +9894,41 @@
                 const row = await fetchPoolMatchBySharedId(client, key).catch(() => null);
                 if (!row) return;
                 const seat = poolRowSeatForMe(row);
-                if (seat < 0 || !row.player_b_id || poolRowIsFinished(row)) return;
+                if (seat < 0 || !row.player_b_id) return;
+                if (poolRowIsFinished(row)) {
+                    // The rack is decided (or the table was just handed off):
+                    // nothing left to notify for THIS match, so stop polling. A
+                    // later notification starts a fresh watch.
+                    stopPoolTurnWatch();
+                    return;
+                }
                 if (Number(row.current_turn) !== seat) {
                     // The turn moved back to them: the next hand-off onto my
                     // seat is a genuinely new notification.
                     poolTurnNotifiedSignature = '';
                     return;
                 }
-                const signature = `${key}:${row.turn_number ?? ''}:${row.current_turn}:${row.turn_started_at || ''}`;
+                // ONE key per opponent hand-off. It is the same value the
+                // dismissed set is keyed on, so the 20 s poll, the Realtime
+                // tick and a reload all agree about "this turn, already
+                // seen". A new hand-off bumps turn_number and gets a new key.
+                const turnKey = poolTurnKeyFor(row, key);
+                const signature = turnKey;
                 if (signature === poolTurnNotifiedSignature) return;
+                if (isPoolTurnKeyDismissed(turnKey)) {
+                    // Already shown and hidden: stay quiet, but keep the
+                    // signature so the poll does not re-evaluate it each tick.
+                    poolTurnNotifiedSignature = signature;
+                    return;
+                }
                 poolTurnNotifiedSignature = signature;
                 const myChallengeId = seat === 1 ? row.player_b_challenge_id : row.player_a_challenge_id;
                 if (!myChallengeId) return;
                 showPoolTurnToast({
                     challenge_id: String(myChallengeId),
                     match_id: key,
-                    source_challenge_id: String(myChallengeId)
+                    source_challenge_id: String(myChallengeId),
+                    turn_key: turnKey
                 });
                 renderActiveChallenges();
             };
@@ -9836,7 +9945,26 @@
             // tabs and dropped sockets are the normal case on a phone).
             void check();
             poolTurnWatchInterval = setInterval(() => { void check(); }, 20000);
+            // Coming back to the tab re-checks ONCE. Without this a hand-off
+            // that arrived while the tab was asleep was only noticed up to 20 s
+            // later -- and the stale row it then saw could raise the banner
+            // again. The dismissed key set makes the re-check silent for a
+            // turn that was already shown.
+            if (!poolTurnVisibilityBound) {
+                poolTurnVisibilityBound = true;
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState !== 'visible') return;
+                    if (!poolTurnWatchKey) return;
+                    // The interval belongs to the CURRENT watch; re-run exactly
+                    // the same check through a queued tick instead of adding a
+                    // second listener (and a second poll) per raise.
+                    clearInterval(poolTurnWatchInterval);
+                    void check();
+                    poolTurnWatchInterval = setInterval(() => { void check(); }, 20000);
+                });
+            }
         }
+        let poolTurnVisibilityBound = false;
 
         let poolTurnNotifiedSignature = '';
 
@@ -9867,7 +9995,10 @@
                         return;
                     }
                     if (!isPoolTurnNotification(row)) return;
-                    showPoolTurnToast(row);
+                    // The notification row is stamped once per hand-off, so its
+                    // id is this turn's key; the watcher/loader attach the
+                    // pool_matches turn counter as a second line of defence.
+                    showPoolTurnToast({ ...row, turn_key: poolTurnKeyFor(row, row.challenge_id || row.source_challenge_id) });
                     void loadDuelNotifications().catch(error => console.error('Could not refresh pool-turn notifications:', error));
                     renderActiveChallenges();
                 })
@@ -9903,7 +10034,12 @@
             const newest = (rows || []).find(isPoolTurnNotification);
             if (!newest || String(newest.id) === String(lastSeenPoolTurnNotificationId)) return;
             lastSeenPoolTurnNotificationId = newest.id;
-            if (!newest.read_at) showPoolTurnToast(newest);
+            if (newest.read_at) return;
+            const turnKey = poolTurnKeyFor(newest, newest.challenge_id || newest.source_challenge_id);
+            // A reload re-reads the same unread row: the persisted dismissed
+            // set is what stops it from raising the banner a second time.
+            if (isPoolTurnKeyDismissed(turnKey)) return;
+            showPoolTurnToast({ ...newest, turn_key: turnKey });
         }
 
         // Same fallback for deadline notices: a missed realtime INSERT must not
@@ -11741,6 +11877,14 @@
         window.buildGameUrl = buildGameUrl;
         window.resolveGameUrl = resolveGameUrl;
         window.assetUrl = assetUrl;
+
+        // Turn-banner handles. They are script-scoped, and the banner can be
+        // raised from several async paths; exposing them makes the dismissal
+        // rules inspectable (and testable) without touching the internals.
+        window.showPoolTurnToast = showPoolTurnToast;
+        window.hidePoolTurnToast = hidePoolTurnToast;
+        window.poolTurnKeyFor = poolTurnKeyFor;
+        window.dismissedPoolTurnKeys = dismissedPoolTurnKeys;
     </script>
 </body>
 </html>

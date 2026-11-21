@@ -172,7 +172,6 @@
       <div class="av" id="av0">😎</div><div class="nm" id="nm0">You</div>
       <div class="slots" id="trayL"></div>
       <div class="ms"><i>Shots</i><b id="hudShots">0</b></div>
-      <div class="ms" id="turnTimerBox" style="display:none"><i>Timer</i><b id="turnTimerDisplay" style="color:#ffd54a">60s</b></div>
       <div id="shotTimerHud" class="hidden" role="timer" aria-label="Shot clock">
         <svg id="shotTimerRing" viewBox="0 0 52 52" aria-hidden="true">
           <circle class="track" cx="26" cy="26" r="22"></circle>
@@ -652,20 +651,39 @@ let shotTimerInterval=null;
 let shotDeadline=0;
 let shotSecondsLeft=SHOT_SECONDS;
 let shotExpiryBusy=false;
+// A shot clock was requested while the board was covered: start it as soon as
+// the player can actually shoot, instead of silently dropping the request.
+let pendingShotArm=false;
 
 /* A run is timed when it can be banked: a solo rack, a stake-backed run, or
  * any rack in the arena. A free friendly rack is untimed. */
 const isTimedRun=()=>SOLO_BACKED||SOLO_MODE||mode==='async'||mode==='online';
 
+/* Is the player actually ON the board? The 50 s ring must never tick while an
+ * intro, the "Waiting for rival" card or the replay overlay still covers the
+ * table: those are not shooting time. */
+function isPlayerOnBoard(){
+  const start=$('startOverlay'),end=$('endOverlay');
+  if(start&&!start.classList.contains('hidden'))return false;
+  if(end&&!end.classList.contains('hidden'))return false;
+  if(replayPlayback)return false;
+  return true;
+}
+
 /* Can this device take a 50 s shot right now? Only an actual turn-based
- * rack, on an owned turn, with the table at rest. */
+ * rack, on an owned turn, on the visible board, with the table at rest. */
 function canArmShotTimer(){
-  return TURN_BASED&&asyncState.ready&&state==='aim'&&cur===TURN_SEAT&&!turnSaveInProgress&&!terminalTurnSaved;
+  return TURN_BASED&&asyncState.ready&&state==='aim'&&cur===TURN_SEAT
+    &&!turnSaveInProgress&&!terminalTurnSaved&&isPlayerOnBoard();
 }
 
 /* Arm (or re-arm) the 50 s shot clock. Safe to call repeatedly. */
 function armShotTimer(reset=true){
   if(!TURN_BASED)return;
+  // If the board is still covered, remember that the ring OWES the player a
+  // fresh shot clock and start it the moment they are on the board (or the
+  // instant they tap Skip on the replay).
+  if(!isPlayerOnBoard())pendingShotArm=true;
   if(reset)shotSecondsLeft=SHOT_SECONDS;
   if(!canArmShotTimer()){
     // Not our throw: the ring is hidden until the table is ours to shoot.
@@ -673,6 +691,7 @@ function armShotTimer(reset=true){
     shotSecondsLeft=SHOT_SECONDS;
     return;
   }
+  pendingShotArm=false;
   stopShotTimer();
   shotDeadline=performance.now()+shotSecondsLeft*1000;
   // Restart the circular animation from a FULL ring: the arc eases back to
@@ -814,15 +833,14 @@ function startTurnTimer(){
   // Wall-clock deadline, so a throttled tab or a backgrounded iframe does not
   // give the player a longer run than everybody else.
   asyncTurnDeadline=performance.now()+TURN_SECONDS*1000;
-  const box=$('turnTimerBox');if(box)box.style.display='';
-  updateTurnTimerHUD();
+  // The run clock is mirrored into the arena's header; the table shows only
+  // the circular 50 s shot ring, so there is no second "Timer" label here.
   asyncTurnTimerInterval=setInterval(()=>{
     asyncTurnTimer=Math.max(0,Math.ceil((asyncTurnDeadline-performance.now())/1000));
     // Publish the strict wall-clock remaining on window: the arena's scoreboard
     // mirrors THIS value, so a private interval cannot let one tab (or a
     // backgrounded iframe) drift past the other player's minute.
     window.__oddzoneRunRemaining=asyncTurnTimer;
-    updateTurnTimerHUD();
     if(asyncTurnTimer<=0){
       stopTurnTimer();
       if(TURN_BASED){
@@ -837,12 +855,7 @@ function stopTurnTimer(){
   asyncTurnTimerInterval=null;
   asyncTurnTimerActive=false;
 }
-function updateTurnTimerHUD(){
-  const el=$('turnTimerDisplay');
-  if(!el)return;
-  el.textContent=asyncTurnTimer+'s';
-  el.style.color=asyncTurnTimer<=10?'#ef6a57':asyncTurnTimer<=20?'#f0a030':'#ffd54a';
-}
+
 
 function freshStats(){return{ballPts:0,scratchPts:0,scratches:0,balls:0};}
 
@@ -901,7 +914,6 @@ function newGame(){
   score=0;shots=0;shotPocketed=[];floats.length=0;strike=null;keyPower=0;asyncWinner=-1;finalizeReported=false;
   // Reset turn-timer state for each fresh run
   stopTurnTimer();firstShotFired=false;asyncTurnTimer=TURN_SECONDS;
-  const box=$('turnTimerBox');if(box)box.style.display='none';
   rackBalls();aimAngle=0;
   startOverlay.classList.add('hidden');endOverlay.classList.add('hidden');
   $('pendingBanner').classList.remove('show');
@@ -910,6 +922,9 @@ function newGame(){
   setNames();renderSlots();
   if(mode==='async'){syncAsyncHud();}
   toast(mode==='async'?'Your table is set — break when ready':players[0].name+' breaks');showAimHint();
+  // The intro is gone and the table is live: start a shot clock that was
+  // requested behind the overlay.
+  resumePendingShotTimer();
 }
 
 /* PHYSICS */
@@ -1071,7 +1086,17 @@ function rearmShotTimer(){
   if(!TURN_BASED)return;
   stopShotTimer();
   shotExpiryBusy=false;
+  pendingShotArm=false;
   armShotTimer(true);
+}
+
+/* The board just became playable (a new rack started, or the replay was
+ * skipped). If a shot clock was owed, open it now, from a full 50 s. */
+function resumePendingShotTimer(){
+  if(!pendingShotArm)return;
+  if(!canArmShotTimer())return;
+  pendingShotArm=false;
+  rearmShotTimer();
 }
 
 /* MODES — declared here, before the live-duel block that uses them.
@@ -1558,6 +1583,9 @@ function finishPoolReplay(){
   beginPoolTurnCapture();
   setPowerUI(0);updateHud();renderSlots();
   toast('Replay complete — your turn',2200);
+  // Skip/completion uncovers the board: the 50 s ring starts now, never during
+  // the replay itself.
+  resumePendingShotTimer();
 }
 function advancePoolReplay(){
   if(!replayPlayback)return;
@@ -1624,7 +1652,6 @@ async function endPoolTurn(reason){
   stopTurnTimer();
   stopShotTimer();
   stopTurnDeadlineWatch();
-  const timerBox=$('turnTimerBox');if(timerBox)timerBox.style.display='none';
   turnExpiryPending=false;
   state='wait';
   const nextSeat=1-TURN_SEAT;
@@ -2831,7 +2858,6 @@ function adoptRivalTable(run){
   asyncState.settled=false;asyncState.saving=false;
   // The clock is armed but NOT running: it starts on B's first shot.
   stopTurnTimer();firstShotFired=false;asyncTurnTimer=TURN_SECONDS;
-  const box=$('turnTimerBox');if(box)box.style.display='none';
   // Active turn controls are B's from the first frame.
   state='aim';setPowerUI(0);updateHud();renderSlots();liveSetCueEnabled(true);
   toast('Loaded the saved rack — play to win',3200);
