@@ -1922,6 +1922,23 @@
         </div>
 
     <script>
+        // Repo-relative asset resolver, declared HERE rather than relying on the
+        // small asset script in <head>. Separate <script> elements share the
+        // global object but NOT lexical bindings, so a bare `assetUrl` here was
+        // a ReferenceError: it threw inside renderHomePopularGames() on the
+        // very first render, aborting everything below it (game cards, the turn
+        // banner and every window export). Resolve it from window when the head
+        // script has published it, and fall back to the same logic otherwise.
+        const assetUrl = typeof window.assetUrl === 'function'
+            ? window.assetUrl
+            : function assetUrl(pathOrUrl) {
+                const raw = String(pathOrUrl || '').trim();
+                if (!raw) return '';
+                if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+                if (raw.startsWith('./') || raw.startsWith('../')) return raw;
+                return (window.ODDZONE_ASSET_PREFIX || './') + raw.replace(/^\/+/, '');
+            };
+
         let currentAuthMode = 'login';
         let userWalletBalance = 0;
         let activeUser = { name: "Player_One", email: "player@oddzone.ng" };
@@ -8416,9 +8433,15 @@
         }
 
         function createSkyPatrolGame() {
+            // The opening script tag is assembled here rather than written as
+            // a literal. The HTML parser ends a script element at the first
+            // real close tag it finds inside the text, so these tags are kept
+            // out of the source entirely: the generated game still gets them,
+            // the outer document never mis-parses one.
+            const OPEN_SCRIPT = '<' + 'script>';
             return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><style>
                 *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#07111b;color:#e8f4ff;font-family:system-ui,sans-serif}canvas{display:block;width:100%;height:100%;touch-action:none}.help{position:absolute;left:0;right:0;bottom:16px;text-align:center;color:#b8cada;font-size:12px;text-shadow:0 1px 4px #000;pointer-events:none}
-                <\/style></head><body><canvas id="field" aria-label="Sky Patrol arcade shooter"></canvas><div class="help">Move with A/D or arrow keys · Hold Space to fire · Touch and drag to steer</div><\/script><script>
+                <\/style></head><body><canvas id="field" aria-label="Sky Patrol arcade shooter"></canvas><div class="help">Move with A/D or arrow keys · Hold Space to fire · Touch and drag to steer</div>${OPEN_SCRIPT}
                 (()=>{const canvas=document.getElementById('field'),ctx=canvas.getContext('2d');let width=0,height=0,scale=1,score=0,ended=false,shipX=.5,lastShot=0,lastSpawn=0,lastFrame=0;const keys=new Set(),shots=[],targets=[],stars=[];
                 function resize(){scale=Math.min(window.devicePixelRatio||1,2);width=innerWidth;height=innerHeight;canvas.width=Math.floor(width*scale);canvas.height=Math.floor(height*scale);ctx.setTransform(scale,0,0,scale,0,0);stars.length=0;for(let index=0;index<70;index++)stars.push({x:Math.random()*width,y:Math.random()*height,size:Math.random()*1.8+.4,speed:Math.random()*24+12})}window.addEventListener('resize',resize);resize();
                 function report(){parent.postMessage({type:'oddzone:score',score},'*')}function finish(){if(ended)return;ended=true;parent.postMessage({type:'oddzone:game-complete',score},'*')}
@@ -11876,15 +11899,21 @@
         window.renderGameCards = renderGameCards;
         window.buildGameUrl = buildGameUrl;
         window.resolveGameUrl = resolveGameUrl;
+        // assetUrl is declared at the top of this block now (see the note
+        // there), so this handle is always resolvable.
         window.assetUrl = assetUrl;
 
         // Turn-banner handles. They are script-scoped, and the banner can be
         // raised from several async paths; exposing them makes the dismissal
         // rules inspectable (and testable) without touching the internals.
-        window.showPoolTurnToast = showPoolTurnToast;
-        window.hidePoolTurnToast = hidePoolTurnToast;
-        window.poolTurnKeyFor = poolTurnKeyFor;
-        window.dismissedPoolTurnKeys = dismissedPoolTurnKeys;
+        try {
+            window.showPoolTurnToast = showPoolTurnToast;
+            window.hidePoolTurnToast = hidePoolTurnToast;
+            window.poolTurnKeyFor = poolTurnKeyFor;
+            window.dismissedPoolTurnKeys = dismissedPoolTurnKeys;
+        } catch (error) {
+            console.warn('Could not expose the turn-banner handles:', error);
+        }
     </script>
 </body>
 </html>
