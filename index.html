@@ -1,9 +1,31 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-oddzone-ready="0">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>OddZone Bet</title>
+    <!-- Boot marker. The <html> element starts with data-oddzone-ready="0" and
+         the FIRST statement of the boot block in the body flips it to "1".
+         Nothing in that block touches the html element before that line, so
+         "1" proves the browser really executed the inline script.
+
+         Why it matters: an Android in-app browser or WebView host that injects
+         a JavaScriptBridge object cannot get it into a document containing an
+         inline script element with no src. When that injection is refused the
+         rest of the inline block is erased or never run during parsing: no
+         syntax error, no console message, and every inline onclick handler on
+         the page (openWelcomeAuth, KYC, submit) becomes a no-op.
+
+         The boot block therefore adds its own click rescue as its second
+         statement, before anything else can fail: the handler SOURCE TEXT of a
+         tapped element is decoded and routed to the real function. The fallback
+         notice at the end of the block covers the remaining case where buttons
+         are still inert.
+
+         NOTE: never write a literal script tag in this file, not even in a
+         comment. The HTML tokenizer closes the open script element at the first
+         closing tag it sees anywhere in the data, which silently truncates the
+         block and takes every handler below it with it. -->
 
     <!-- PWA & Theme Meta Tags -->
     <!-- Relative, not root-relative: the app is served from
@@ -79,6 +101,14 @@
         }
         applyStaticAssetSources();
         document.addEventListener('DOMContentLoaded', applyStaticAssetSources);
+
+        // The boot block below resolves `assetUrl` from window on purpose (its
+        // own lexical binding cannot be reached across script elements), so
+        // publish it here. Without this handle that block threw a
+        // ReferenceError on its first statement and every handler below it --
+        // including openWelcomeAuth -- never initialised.
+        window.assetUrl = assetUrl;
+        window.applyStaticAssetSources = applyStaticAssetSources;
     </script>
     <script>
         // The CDN build (also re-served and cached by some mobile carriers)
@@ -1922,13 +1952,42 @@
         </div>
 
     <script>
+        // FIRST statement on purpose (see the boot-marker note in <head>). If a
+        // host erases this block before this line the marker keeps saying 0,
+        // and the fallback notice below can tell that apart from a later error.
+        document.documentElement.dataset.oddzoneReady = '1';
+
+        // Inline handlers can be erased by the host (see <head>), so taps are
+        // routed by their source text through ONE early listener. Registered
+        // before anything heavy below can throw, and with no predecessor
+        // wrapper in the click chain, so a silent handler is rescued here.
+        document.addEventListener('click', function (event) {
+            const target = event.target && event.target.closest ? event.target.closest('[onclick]') : null;
+            if (!target) return;
+            const source = target.getAttribute('onclick') || '';
+            // The welcome entry points are wired directly (not through the
+            // dispatcher) so they work even if the dispatcher itself failed.
+            if (source.indexOf('openWelcomeAuth') === 0) {
+                openWelcomeAuth(source.indexOf("'login'") !== -1 ? 'login' : 'signup');
+                return;
+            }
+            if (source.indexOf('switchAuthTab') === 0) {
+                switchAuthTab(source.indexOf("'login'") !== -1 ? 'login' : 'signup');
+            }
+        }, true);
+
         // Repo-relative asset resolver, declared HERE rather than relying on the
-        // small asset script in <head>. Separate <script> elements share the
+        // small asset script in <head>. Separate script elements share the
         // global object but NOT lexical bindings, so a bare `assetUrl` here was
         // a ReferenceError: it threw inside renderHomePopularGames() on the
         // very first render, aborting everything below it (game cards, the turn
         // banner and every window export). Resolve it from window when the head
         // script has published it, and fall back to the same logic otherwise.
+        //
+        // NOTE: never write a literal opening script tag anywhere in this file,
+        // not even inside a comment or a template string. HTML ends the script
+        // element at the first closing tag it sees, so one stray tag silently
+        // truncates this whole block and every handler declared below it.
         const assetUrl = typeof window.assetUrl === 'function'
             ? window.assetUrl
             : function assetUrl(pathOrUrl) {
@@ -3224,10 +3283,20 @@
         }
 
         function openWelcomeAuth(mode) {
+            const wanted = mode === 'login' ? 'login' : 'signup';
+            // Set the mode FIRST: switchAuthTab writes button labels and can
+            // throw on a missing node, and the view swap must not depend on it.
+            currentAuthMode = wanted;
             document.getElementById('view-welcome')?.classList.add('hidden');
             document.getElementById('view-auth')?.classList.remove('hidden');
             document.getElementById('main-scroll-area')?.scrollTo({ top: 0 });
-            switchAuthTab(mode === 'login' ? 'login' : 'signup');
+            try {
+                switchAuthTab(wanted);
+            } catch (error) {
+                // The view is already showing; a cosmetic tab failure must not
+                // roll the navigation back or leave the click 'dead'.
+                console.warn('Could not finish switching the auth tab:', error);
+            }
         }
 
         function switchAuthTab(mode) {
@@ -11877,7 +11946,7 @@
         // (profile card, settings panel, KYC modal header and its submit
         // button) and use inline onclick handlers. Inline handlers resolve
         // their names on the GLOBAL object, but every one of these functions is
-        // declared inside this <script>, so the names were not on window: every
+        // declared inside this script block, so the names were not on window: every
         // "Verify BVN" / submit tap threw
         //   ReferenceError: openKycModal is not defined
         // and the verification flow could not be started from the UI at all.
@@ -11903,6 +11972,15 @@
         // there), so this handle is always resolvable.
         window.assetUrl = assetUrl;
 
+        // Welcome-screen entry points. The "START PLAYING" / "Log in" buttons
+        // use inline onclick handlers, and an inline handler resolves its names
+        // on the GLOBAL object. These functions are declared in this script's
+        // scope, so without these handles every tap threw
+        //   ReferenceError: openWelcomeAuth is not defined
+        // and the sign-up / log-in screen could not be opened at all.
+        window.openWelcomeAuth = openWelcomeAuth;
+        window.switchAuthTab = switchAuthTab;
+
         // Turn-banner handles. They are script-scoped, and the banner can be
         // raised from several async paths; exposing them makes the dismissal
         // rules inspectable (and testable) without touching the internals.
@@ -11914,6 +11992,25 @@
         } catch (error) {
             console.warn('Could not expose the turn-banner handles:', error);
         }
+
+        // Boot-fallback notice. Normally the marker is "1" and this never fires.
+        // It covers the case where the host erased the start of the block but a
+        // later part of it still ran: the welcome buttons would be inert, so the
+        // user should see why instead of tapping a dead button.
+        window.addEventListener('load', function () {
+            setTimeout(function () {
+                if (document.documentElement.dataset.oddzoneReady === '1') return;
+                if (document.getElementById('boot-fallback-notice')) return;
+                const host = document.querySelector('#view-welcome .mx-auto') || document.getElementById('view-welcome');
+                if (!host) return;
+                const notice = document.createElement('p');
+                notice.id = 'boot-fallback-notice';
+                notice.setAttribute('role', 'alert');
+                notice.className = 'mt-5 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-left text-[11px] leading-5 text-amber-200';
+                notice.innerHTML = 'This browser blocked the app\u2019s startup script, so buttons cannot respond here. Tap <b>\u22ee</b> (or <b>\u2022\u2022\u2022</b>) and choose <b>Open in browser</b> to continue.';
+                host.appendChild(notice);
+            }, 1200);
+        });
     </script>
 </body>
 </html>
